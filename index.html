@@ -1,0 +1,805 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Card Catalog — Anki Deck Builder</title>
+<link rel="icon" href="data:image/svg+xml,<svg xmlns=%22http://www.w3.org/2000/svg%22 viewBox=%220 0 100 100%22><text y=%22.9em%22 font-size=%2290%22>🗂️</text></svg>">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Fraunces:opsz,wght@9..144,400;9..144,600;9..144,700&family=IBM+Plex+Mono:wght@400;500;600&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg: #2b1f16;
+    --bg-deep: #211710;
+    --wood-line: #3a2a1c;
+    --card: #f7f1e1;
+    --card-shade: #efe6cf;
+    --rule: #8fa6c4;
+    --margin: #a23f3c;
+    --ink: #241b12;
+    --ink-soft: #5c5142;
+    --brass: #c9a227;
+    --brass-dark: #9c7e1c;
+    --paper-shadow: rgba(0,0,0,.45);
+    --danger: #a23f3c;
+  }
+  *{box-sizing:border-box;}
+  html,body{margin:0;padding:0;}
+  body{
+    background:
+      repeating-linear-gradient(0deg, var(--wood-line) 0 2px, transparent 2px 44px),
+      var(--bg);
+    color: var(--card);
+    font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+    min-height:100vh;
+    -webkit-font-smoothing:antialiased;
+  }
+  a{color:inherit;}
+
+  .wrap{
+    max-width: 980px;
+    margin: 0 auto;
+    padding: 48px 24px 96px;
+  }
+
+  header.top{
+    display:flex;
+    align-items:baseline;
+    justify-content:space-between;
+    gap:16px;
+    margin-bottom: 40px;
+    flex-wrap: wrap;
+  }
+  header.top h1{
+    font-family:"Fraunces", serif;
+    font-optical-sizing:auto;
+    font-weight:600;
+    font-size: clamp(28px, 4vw, 40px);
+    margin:0;
+    letter-spacing:-0.01em;
+    color: var(--card);
+  }
+  header.top h1 .drawer-label{
+    display:block;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:12px;
+    letter-spacing:.12em;
+    color: var(--brass);
+    margin-bottom:6px;
+  }
+  header.top p.tagline{
+    margin:0;
+    max-width: 320px;
+    font-size:14px;
+    line-height:1.5;
+    color: #cbb99e;
+  }
+
+  /* ---- the index card (input form) ---- */
+  .catalog-card{
+    background: var(--card);
+    color: var(--ink);
+    border-radius: 2px;
+    padding: 28px 28px 24px;
+    box-shadow: 3px 4px 0 rgba(0,0,0,.28), 7px 9px 0 rgba(0,0,0,.14);
+    position: relative;
+    background-image: repeating-linear-gradient(
+        to bottom,
+        transparent 0,
+        transparent 33px,
+        var(--rule) 33px,
+        var(--rule) 34px
+      );
+    background-position: 0 92px;
+  }
+  .catalog-card::before{
+    content:"";
+    position:absolute;
+    top:0; bottom:0; left:64px;
+    width:1.5px;
+    background: var(--margin);
+    opacity:.75;
+  }
+  .catalog-card .inner{
+    padding-left: 40px;
+  }
+
+  .field-row{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 20px;
+    margin-bottom: 6px;
+  }
+  @media (max-width: 620px){
+    .field-row{grid-template-columns: 1fr;}
+  }
+  label{
+    display:block;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11px;
+    letter-spacing:.08em;
+    color: var(--ink-soft);
+    margin-bottom:6px;
+  }
+  textarea, input[type=text]{
+    width:100%;
+    border:none;
+    background:transparent;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:15px;
+    color: var(--ink);
+    resize:vertical;
+    padding:0 0 8px;
+    line-height:33px;
+    border-bottom: 1px solid rgba(36,27,18,.15);
+  }
+  textarea{min-height:66px;}
+  textarea:focus, input:focus{outline:none; border-bottom-color: var(--margin);}
+  textarea::placeholder, input::placeholder{color:#a99d84;}
+
+  .tag-deck-row{
+    display:grid;
+    grid-template-columns: 1fr 1fr;
+    gap:20px;
+    margin-top: 18px;
+  }
+  @media (max-width: 620px){ .tag-deck-row{grid-template-columns:1fr;} }
+
+  .card-actions{
+    display:flex;
+    justify-content:flex-end;
+    align-items:center;
+    gap:12px;
+    margin-top:18px;
+  }
+
+  button{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:13px;
+    letter-spacing:.03em;
+    border:none;
+    cursor:pointer;
+    padding:10px 18px;
+    border-radius:1px;
+    transition: transform .08s ease, box-shadow .08s ease;
+  }
+  button:active{transform: translateY(1px);}
+  .btn-brass{
+    background: var(--brass);
+    color: #211710;
+    font-weight:600;
+    box-shadow: 2px 2px 0 rgba(0,0,0,.3);
+  }
+  .btn-brass:hover{background: var(--brass-dark);}
+  .btn-ghost{
+    background:transparent;
+    color: var(--ink-soft);
+    border: 1px solid rgba(36,27,18,.25);
+  }
+  .btn-ghost:hover{border-color: var(--margin); color: var(--margin);}
+
+  .bulk-toggle{
+    background:none;
+    border:none;
+    color:#cbb99e;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:12px;
+    text-decoration underline;
+    text-underline-offset:3px;
+    cursor:pointer;
+    padding:0;
+    margin-top:14px;
+  }
+  .bulk-toggle:hover{color:var(--brass);}
+  .bulk-panel{
+    display:none;
+    margin-top:14px;
+    background: rgba(0,0,0,.18);
+    border: 1px solid var(--wood-line);
+    padding:16px;
+    border-radius:2px;
+  }
+  .bulk-panel.open{display:block;}
+  .bulk-panel p{
+    margin:0 0 10px;
+    font-size:12.5px;
+    color:#cbb99e;
+    line-height:1.5;
+  }
+  .bulk-panel textarea{
+    background: rgba(0,0,0,.25);
+    color: var(--card);
+    border: 1px solid var(--wood-line);
+    padding:10px;
+    border-radius:2px;
+    min-height:120px;
+    line-height:1.6;
+  }
+  .bulk-panel textarea::placeholder{color:#7a6c58;}
+  .bulk-panel .card-actions{margin-top:12px;}
+
+  /* ---- drawer / deck section ---- */
+  .drawer-head{
+    display:flex;
+    justify-content:space-between;
+    align-items:baseline;
+    margin:52px 0 18px;
+    gap:12px;
+    flex-wrap:wrap;
+  }
+  .drawer-head h2{
+    font-family:"Fraunces", serif;
+    font-weight:600;
+    font-size:22px;
+    margin:0;
+  }
+  .count-tag{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:12px;
+    color: var(--brass);
+  }
+
+  .stack{
+    display:flex;
+    flex-direction:column;
+    gap:10px;
+  }
+  .entry{
+    background: var(--card);
+    color: var(--ink);
+    border-radius:2px;
+    padding:16px 18px;
+    display:grid;
+    grid-template-columns: 1fr 1fr auto;
+    gap:16px;
+    align-items:center;
+    box-shadow: 2px 3px 0 rgba(0,0,0,.22);
+    border-left: 3px solid var(--margin);
+  }
+  @media (max-width: 700px){
+    .entry{grid-template-columns:1fr; gap:6px;}
+  }
+  .entry .f, .entry .b{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:14px;
+    line-height:1.4;
+    white-space:pre-wrap;
+    word-break:break-word;
+  }
+  .entry .f{color:var(--ink);}
+  .entry .b{color: var(--ink-soft);}
+  .entry .f::before{content:"Q  "; color:var(--margin); font-weight:600;}
+  .entry .b::before{content:"A  "; color:var(--rule); font-weight:600;}
+  .entry .tags{
+    display:block;
+    font-size:11px;
+    color:var(--brass-dark);
+    margin-top:4px;
+  }
+  .entry .remove{
+    background:none;
+    border:none;
+    color: var(--ink-soft);
+    font-size:18px;
+    cursor:pointer;
+    line-height:1;
+    padding:4px 8px;
+  }
+  .entry .remove:hover{color:var(--margin);}
+
+  .empty{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:13px;
+    color:#a1926f;
+    border: 1px dashed var(--wood-line);
+    padding:28px;
+    text-align:center;
+    border-radius:2px;
+  }
+
+  .export-bar{
+    margin-top:40px;
+    display:flex;
+    justify-content:space-between;
+    align-items:center;
+    gap:16px;
+    flex-wrap:wrap;
+    padding-top:24px;
+    border-top: 1px solid var(--wood-line);
+  }
+  .export-bar .deck-name-field{
+    display:flex;
+    align-items:center;
+    gap:10px;
+  }
+  .export-bar .deck-name-field label{margin:0;}
+  .export-bar input[type=text]{
+    color: var(--card);
+    border-bottom:1px solid rgba(247,241,225,.3);
+    width:220px;
+    line-height:1.4;
+    padding-bottom:4px;
+  }
+  .export-bar input[type=text]:focus{border-bottom-color:var(--brass);}
+
+  #status{
+    font-family:"IBM Plex Mono", monospace;
+    font-size:12px;
+    color:#cbb99e;
+    min-height:16px;
+    margin-top:10px;
+  }
+  #status.err{color:#e08a87;}
+  #status.ok{color:#9fd18a;}
+
+  footer{
+    margin-top:64px;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11.5px;
+    color:#7a6c58;
+    line-height:1.7;
+    border-top:1px solid var(--wood-line);
+    padding-top:18px;
+  }
+  footer a{color:#9c8768; text-decoration:underline;}
+</style>
+</head>
+<body>
+<div class="wrap">
+
+  <header class="top">
+    <h1><span class="drawer-label">DRAWER No. 1</span>Card Catalog</h1>
+    <p class="tagline">Type up cards here, then pull the drawer to export a deck your Anki app can import directly.</p>
+  </header>
+
+  <section class="catalog-card">
+    <div class="inner">
+      <div class="field-row">
+        <div>
+          <label for="frontInput">Front (question)</label>
+          <textarea id="frontInput" placeholder="What year did the Berlin Wall fall?"></textarea>
+        </div>
+        <div>
+          <label for="backInput">Back (answer)</label>
+          <textarea id="backInput" placeholder="1989"></textarea>
+        </div>
+      </div>
+      <div class="tag-deck-row">
+        <div>
+          <label for="tagsInput">Tags (optional, space-separated)</label>
+          <input type="text" id="tagsInput" placeholder="history 20th-century">
+        </div>
+      </div>
+      <div class="card-actions">
+        <button class="btn-brass" id="addCardBtn">File this card</button>
+      </div>
+
+      <button class="bulk-toggle" id="bulkToggle">+ paste in several cards at once</button>
+      <div class="bulk-panel" id="bulkPanel">
+        <p>One card per line, front and back separated by a tab or a pipe ( | ). Example:<br>
+        <em>Capital of Japan | Tokyo</em></p>
+        <textarea id="bulkInput" placeholder="Front 1 | Back 1&#10;Front 2 | Back 2"></textarea>
+        <div class="card-actions">
+          <button class="btn-ghost" id="bulkAddBtn">Add these cards</button>
+        </div>
+      </div>
+    </div>
+  </section>
+
+  <div class="drawer-head">
+    <h2>Filed cards</h2>
+    <span class="count-tag" id="countTag">0 cards</span>
+  </div>
+
+  <div class="stack" id="cardStack"></div>
+  <div class="empty" id="emptyState">The drawer is empty. File your first card above.</div>
+
+  <div class="export-bar">
+    <div class="deck-name-field">
+      <label for="deckNameInput">Deck name</label>
+      <input type="text" id="deckNameInput" value="My Deck">
+    </div>
+    <div style="display:flex; gap:10px; align-items:center;">
+      <button class="btn-ghost" id="clearAllBtn">Clear drawer</button>
+      <button class="btn-brass" id="exportBtn">Download .apkg</button>
+    </div>
+  </div>
+  <div id="status"></div>
+
+  <footer>
+    Runs entirely in your browser — cards are kept only in this browser's local storage until you export them, and are never sent anywhere.
+    Import the downloaded .apkg via Anki's File → Import.
+  </footer>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/jszip@3.10.2/dist/jszip.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/sql-wasm.js"></script>
+<script>
+(function(){
+  "use strict";
+
+  var STORAGE_KEY = "cardCatalog.cards.v1";
+  var DECK_KEY = "cardCatalog.deckName.v1";
+
+  var cards = [];
+  try {
+    var saved = localStorage.getItem(STORAGE_KEY);
+    if (saved) cards = JSON.parse(saved);
+  } catch(e) { cards = []; }
+
+  var frontInput = document.getElementById("frontInput");
+  var backInput = document.getElementById("backInput");
+  var tagsInput = document.getElementById("tagsInput");
+  var addCardBtn = document.getElementById("addCardBtn");
+  var cardStack = document.getElementById("cardStack");
+  var emptyState = document.getElementById("emptyState");
+  var countTag = document.getElementById("countTag");
+  var clearAllBtn = document.getElementById("clearAllBtn");
+  var exportBtn = document.getElementById("exportBtn");
+  var deckNameInput = document.getElementById("deckNameInput");
+  var statusEl = document.getElementById("status");
+  var bulkToggle = document.getElementById("bulkToggle");
+  var bulkPanel = document.getElementById("bulkPanel");
+  var bulkInput = document.getElementById("bulkInput");
+  var bulkAddBtn = document.getElementById("bulkAddBtn");
+
+  var savedDeck = localStorage.getItem(DECK_KEY);
+  if (savedDeck) deckNameInput.value = savedDeck;
+  deckNameInput.addEventListener("input", function(){
+    localStorage.setItem(DECK_KEY, deckNameInput.value);
+  });
+
+  function persist(){
+    localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+  }
+
+  function escapeHtml(s){
+    return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
+  }
+
+  function render(){
+    cardStack.innerHTML = "";
+    if (cards.length === 0){
+      emptyState.style.display = "block";
+    } else {
+      emptyState.style.display = "none";
+      cards.forEach(function(c, idx){
+        var el = document.createElement("div");
+        el.className = "entry";
+        var tagsHtml = c.tags ? '<span class="tags">' + escapeHtml(c.tags) + '</span>' : "";
+        el.innerHTML =
+          '<div class="f">' + escapeHtml(c.front) + tagsHtml + '</div>' +
+          '<div class="b">' + escapeHtml(c.back) + '</div>' +
+          '<button class="remove" title="Remove card" data-idx="' + idx + '">&times;</button>';
+        cardStack.appendChild(el);
+      });
+    }
+    countTag.textContent = cards.length + (cards.length === 1 ? " card" : " cards");
+  }
+
+  cardStack.addEventListener("click", function(e){
+    var btn = e.target.closest(".remove");
+    if (!btn) return;
+    var idx = parseInt(btn.getAttribute("data-idx"), 10);
+    cards.splice(idx, 1);
+    persist();
+    render();
+  });
+
+  function addCard(front, back, tags){
+    front = (front || "").trim();
+    back = (back || "").trim();
+    if (!front || !back) return false;
+    cards.push({ front: front, back: back, tags: (tags || "").trim() });
+    return true;
+  }
+
+  addCardBtn.addEventListener("click", function(){
+    var ok = addCard(frontInput.value, backInput.value, tagsInput.value);
+    if (!ok){
+      setStatus("A card needs both a front and a back.", "err");
+      return;
+    }
+    frontInput.value = "";
+    backInput.value = "";
+    tagsInput.value = "";
+    frontInput.focus();
+    persist();
+    render();
+    setStatus("Card filed.", "ok");
+  });
+
+  [frontInput, backInput].forEach(function(el){
+    el.addEventListener("keydown", function(e){
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)){
+        e.preventDefault();
+        addCardBtn.click();
+      }
+    });
+  });
+
+  bulkToggle.addEventListener("click", function(){
+    bulkPanel.classList.toggle("open");
+  });
+
+  bulkAddBtn.addEventListener("click", function(){
+    var lines = bulkInput.value.split("\n");
+    var added = 0;
+    lines.forEach(function(line){
+      if (!line.trim()) return;
+      var parts = line.includes("\t") ? line.split("\t") : line.split("|");
+      if (parts.length < 2) return;
+      var front = parts[0];
+      var back = parts.slice(1).join(parts[0].includes("\t") ? "\t" : "|");
+      if (addCard(front, back, "")) added++;
+    });
+    if (added > 0){
+      bulkInput.value = "";
+      persist();
+      render();
+      setStatus(added + " card" + (added === 1 ? "" : "s") + " added from paste.", "ok");
+    } else {
+      setStatus("Couldn't find any front | back pairs in that text.", "err");
+    }
+  });
+
+  clearAllBtn.addEventListener("click", function(){
+    if (cards.length === 0) return;
+    if (!confirm("Remove all " + cards.length + " filed cards? This can't be undone.")) return;
+    cards = [];
+    persist();
+    render();
+    setStatus("Drawer cleared.", "ok");
+  });
+
+  function setStatus(msg, cls){
+    statusEl.textContent = msg;
+    statusEl.className = cls || "";
+  }
+
+  // ---------------- .apkg generation ----------------
+
+  var TEMPLATE_SQL = [
+    'PRAGMA foreign_keys=OFF;',
+    'BEGIN TRANSACTION;',
+    'CREATE TABLE col (',
+    '    id              integer primary key,',
+    '    crt             integer not null,',
+    '    mod             integer not null,',
+    '    scm             integer not null,',
+    '    ver             integer not null,',
+    '    dty             integer not null,',
+    '    usn             integer not null,',
+    '    ls              integer not null,',
+    '    conf            text not null,',
+    '    models          text not null,',
+    '    decks           text not null,',
+    '    dconf           text not null,',
+    '    tags            text not null',
+    ');',
+    'INSERT INTO "col" VALUES(',
+    '  1,',
+    '  1388548800,',
+    '  1435645724219,',
+    '  1435645724215,',
+    '  11,',
+    '  0,',
+    '  0,',
+    '  0,',
+    '  \'{"nextPos": 1, "estTimes": true, "activeDecks": [1], "sortType": "noteFld", "timeLim": 0, "sortBackwards": false, "addToCur": true, "curDeck": 1, "newBury": true, "newSpread": 0, "dueCounts": true, "curModel": "1435645724216", "collapseTime": 1200}\',',
+    '  \'{"1388596687391": {"vers": [], "name": "Basic-f15d2", "tags": ["Tag"], "did": 1435588830424, "usn": -1, "req": [[0, "all", [0]]], "flds": [{"name": "Front", "media": [], "sticky": false, "rtl": false, "ord": 0, "font": "Arial", "size": 20}, {"name": "Back", "media": [], "sticky": false, "rtl": false, "ord": 1, "font": "Arial", "size": 20}], "sortf": 0, "latexPre": "\\\\documentclass[12pt]{article}\\n\\\\special{papersize=3in,5in}\\n\\\\usepackage[utf8]{inputenc}\\n\\\\usepackage{amssymb,amsmath}\\n\\\\pagestyle{empty}\\n\\\\setlength{\\\\parindent}{0in}\\n\\\\begin{document}\\n", "tmpls": [{"name": "Card 1", "qfmt": "{{Front}}", "did": null, "bafmt": "", "afmt": "{{Back}}", "ord": 0, "bqfmt": ""}], "latexPost": "\\\\end{document}", "type": 0, "id": 1388596687391, "css": ".card {\\n font-family: arial;\\n font-size: 20px;\\n text-align: center;\\n color: black;\\n background-color: white;\\n}\\n", "mod": 1435645658}}\',',
+    '  \'{"1": {"desc": "", "name": "Default", "extendRev": 50, "usn": 0, "collapsed": false, "newToday": [0, 0], "timeToday": [0, 0], "dyn": 0, "extendNew": 10, "conf": 1, "revToday": [0, 0], "lrnToday": [0, 0], "id": 1, "mod": 1435645724}, "1435588830424": {"desc": "", "name": "Template", "extendRev": 50, "usn": -1, "collapsed": false, "newToday": [545, 0], "timeToday": [545, 0], "dyn": 0, "extendNew": 10, "conf": 1, "revToday": [545, 0], "lrnToday": [545, 0], "id": 1435588830424, "mod": 1435588830}}\',',
+    '  \'{"1": {"name": "Default", "replayq": true, "lapse": {"leechFails": 8, "minInt": 1, "delays": [10], "leechAction": 0, "mult": 0}, "rev": {"perDay": 100, "fuzz": 0.05, "ivlFct": 1, "maxIvl": 36500, "ease4": 1.3, "bury": true, "minSpace": 1}, "timer": 0, "maxTaken": 60, "usn": 0, "new": {"perDay": 20, "delays": [1, 10], "separate": true, "ints": [1, 4, 7], "initialFactor": 2500, "bury": true, "order": 1}, "mod": 0, "id": 1, "autoplay": true}}\',',
+    '  \'{}\'',
+    ');',
+    'CREATE TABLE notes (',
+    '    id              integer primary key,',
+    '    guid            text not null,',
+    '    mid             integer not null,',
+    '    mod             integer not null,',
+    '    usn             integer not null,',
+    '    tags            text not null,',
+    '    flds            text not null,',
+    '    sfld            text not null,',
+    '    csum            integer not null,',
+    '    flags           integer not null,',
+    '    data            text not null',
+    ');',
+    'CREATE TABLE cards (',
+    '    id              integer primary key,',
+    '    nid             integer not null,',
+    '    did             integer not null,',
+    '    ord             integer not null,',
+    '    mod             integer not null,',
+    '    usn             integer not null,',
+    '    type            integer not null,',
+    '    queue           integer not null,',
+    '    due             integer not null,',
+    '    ivl             integer not null,',
+    '    factor          integer not null,',
+    '    reps            integer not null,',
+    '    lapses          integer not null,',
+    '    left            integer not null,',
+    '    odue            integer not null,',
+    '    odid            integer not null,',
+    '    flags           integer not null,',
+    '    data            text not null',
+    ');',
+    'CREATE TABLE revlog (',
+    '    id              integer primary key,',
+    '    cid             integer not null,',
+    '    usn             integer not null,',
+    '    ease            integer not null,',
+    '    ivl             integer not null,',
+    '    lastIvl         integer not null,',
+    '    factor          integer not null,',
+    '    time            integer not null,',
+    '    type            integer not null',
+    ');',
+    'CREATE TABLE graves (',
+    '    usn             integer not null,',
+    '    oid             integer not null,',
+    '    type            integer not null',
+    ');',
+    'ANALYZE sqlite_master;',
+    'CREATE INDEX ix_notes_usn on notes (usn);',
+    'CREATE INDEX ix_cards_usn on cards (usn);',
+    'CREATE INDEX ix_revlog_usn on revlog (usn);',
+    'CREATE INDEX ix_cards_nid on cards (nid);',
+    'CREATE INDEX ix_cards_sched on cards (did, queue, due);',
+    'CREATE INDEX ix_revlog_cid on revlog (cid);',
+    'CREATE INDEX ix_notes_csum on notes (csum);',
+    'COMMIT;'
+  ].join('\n');
+
+  var sqlJsReady = initSqlJs({
+    locateFile: function(file){ return 'https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/' + file; }
+  });
+
+  function sha1Hex(str){
+    var enc = new TextEncoder().encode(str);
+    return crypto.subtle.digest('SHA-1', enc).then(function(buf){
+      var bytes = new Uint8Array(buf);
+      var hex = '';
+      for (var i = 0; i < bytes.length; i++){
+        hex += bytes[i].toString(16).padStart(2, '0');
+      }
+      return hex;
+    });
+  }
+
+  function checksumFromHex(hex){
+    return parseInt(hex.substr(0, 8), 16);
+  }
+
+  // Anki fields are rendered as HTML, so plain-text input needs escaping
+  // and newlines need to become <br> or they'll be silently collapsed.
+  function toAnkiHtml(text){
+    return text
+      .replace(/&/g, '&amp;')
+      .replace(/</g, '&lt;')
+      .replace(/>/g, '&gt;')
+      .replace(/\n/g, '<br>');
+  }
+
+  function getLastItem(obj){
+    var keys = Object.keys(obj);
+    var lastKey = keys[keys.length - 1];
+    var item = obj[lastKey];
+    delete obj[lastKey];
+    return item;
+  }
+
+  async function buildApkg(deckName, cardList){
+    var SQL = await sqlJsReady;
+    var db = new SQL.Database();
+    db.run(TEMPLATE_SQL);
+    var SEP = "\u001F";
+
+    function getId(table, col, ts){
+      var stmt = db.prepare('SELECT ' + col + ' as v from ' + table + ' WHERE ' + col + ' >= :ts ORDER BY ' + col + ' DESC LIMIT 1');
+      stmt.bind({':ts': ts});
+      var v = null;
+      if (stmt.step()) v = stmt.getAsObject().v;
+      stmt.free();
+      return v ? (+v + 1) : ts;
+    }
+    function getInitialRowValue(table, col){
+      var res = db.exec('select ' + col + ' from ' + table);
+      return JSON.parse(res[0].values[0][0]);
+    }
+
+    var now = Date.now();
+    var topDeckId = getId('cards', 'did', now);
+    var topModelId = getId('notes', 'mid', now + 1);
+
+    var decks = getInitialRowValue('col', 'decks');
+    var deck = getLastItem(decks);
+    deck.name = deckName;
+    deck.id = topDeckId;
+    decks[topDeckId + ''] = deck;
+    db.run('update col set decks=? where id=1', [JSON.stringify(decks)]);
+
+    var models = getInitialRowValue('col', 'models');
+    var model = getLastItem(models);
+    model.name = deckName;
+    model.did = topDeckId;
+    model.id = topModelId;
+    models[String(topModelId)] = model;
+    db.run('update col set models=? where id=1', [JSON.stringify(models)]);
+
+    for (var i = 0; i < cardList.length; i++){
+      var c = cardList[i];
+      var cardNow = Date.now() + i; // keep strictly increasing even within the same millisecond
+      var guidHex = await sha1Hex(topDeckId + c.front + c.back + i);
+      var noteGuid = guidHex.substring(0, 10);
+      var noteId = getId('notes', 'id', cardNow);
+      var frontHtml = toAnkiHtml(c.front);
+      var backHtml = toAnkiHtml(c.back);
+      var flds = frontHtml + SEP + backHtml;
+      var fldsHash = await sha1Hex(flds);
+      var strTags = c.tags ? (' ' + c.tags.replace(/,/g, ' ').trim() + ' ') : '';
+
+      db.run('insert into notes values(?,?,?,?,?,?,?,?,?,?,?)', [
+        noteId, noteGuid, topModelId, getId('notes', 'mod', cardNow), -1,
+        strTags, flds, frontHtml, checksumFromHex(fldsHash), 0, ''
+      ]);
+
+      var cardId = getId('cards', 'id', cardNow);
+      db.run('insert into cards values(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)', [
+        cardId, noteId, topDeckId, 0,
+        getId('cards', 'mod', cardNow),
+        -1, 0, 0, i + 1, 0, 0, 0, 0, 0, 0, 0, 0, ''
+      ]);
+    }
+
+    var binaryArray = db.export();
+    db.close();
+
+    var zip = new JSZip();
+    zip.file('collection.anki2', binaryArray);
+    zip.file('media', JSON.stringify({}));
+    var blob = await zip.generateAsync({ type: 'blob' });
+    return blob;
+  }
+
+  function slugify(name){
+    return (name || 'deck').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'deck';
+  }
+
+  exportBtn.addEventListener('click', async function(){
+    if (cards.length === 0){
+      setStatus('File at least one card before exporting.', 'err');
+      return;
+    }
+    var deckName = deckNameInput.value.trim() || 'My Deck';
+    exportBtn.disabled = true;
+    var originalLabel = exportBtn.textContent;
+    exportBtn.textContent = 'Building deck…';
+    setStatus('Generating ' + cards.length + ' card' + (cards.length === 1 ? '' : 's') + '…');
+    try{
+      var blob = await buildApkg(deckName, cards);
+      var url = URL.createObjectURL(blob);
+      var a = document.createElement('a');
+      a.href = url;
+      a.download = slugify(deckName) + '.apkg';
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+      setStatus('Downloaded ' + slugify(deckName) + '.apkg — import it via Anki\u2019s File \u2192 Import.', 'ok');
+    } catch(err){
+      console.error(err);
+      setStatus('Something went wrong building the deck: ' + err.message, 'err');
+    } finally {
+      exportBtn.disabled = false;
+      exportBtn.textContent = originalLabel;
+    }
+  });
+
+  render();
+})();
+</script>
+</body>
+</html>
