@@ -219,6 +219,52 @@
   .bulk-panel textarea::placeholder{color:#7a6c58;}
   .bulk-panel .card-actions{margin-top:12px;}
 
+  /* ---- image attach ---- */
+  .img-attach{margin-top:8px;}
+  .img-btn{
+    display:inline-block;
+    font-family:"IBM Plex Mono", monospace;
+    font-size:11px;
+    letter-spacing:.05em;
+    color: var(--ink-soft);
+    border: 1px solid rgba(36,27,18,.25);
+    padding:5px 10px;
+    border-radius:1px;
+    cursor:pointer;
+  }
+  .img-btn:hover{border-color: var(--brass-dark); color: var(--brass-dark);}
+  .img-preview{
+    display:flex;
+    align-items:center;
+    gap:10px;
+    margin-top:8px;
+  }
+  .img-preview img{
+    max-width:72px;
+    max-height:72px;
+    border:1px solid rgba(36,27,18,.2);
+    border-radius:1px;
+    object-fit:cover;
+  }
+  .img-remove{
+    background:none;
+    border:none;
+    color: var(--margin);
+    font-size:16px;
+    cursor:pointer;
+    line-height:1;
+    padding:2px 6px;
+  }
+  .entry-thumb{
+    max-width:56px;
+    max-height:56px;
+    border:1px solid rgba(36,27,18,.2);
+    border-radius:1px;
+    object-fit:cover;
+    display:block;
+    margin-top:6px;
+  }
+
   /* ---- drawer / deck section ---- */
   .drawer-head{
     display:flex;
@@ -359,10 +405,26 @@
         <div>
           <label for="frontInput">Front (question)</label>
           <textarea id="frontInput" placeholder="What year did the Berlin Wall fall?"></textarea>
+          <div class="img-attach" id="frontImgAttach">
+            <label class="img-btn" for="frontImgFile">+ image</label>
+            <input type="file" id="frontImgFile" accept="image/*" hidden>
+            <div class="img-preview" id="frontImgPreview" style="display:none;">
+              <img id="frontImgThumb" alt="">
+              <button type="button" class="img-remove" id="frontImgRemove" title="Remove image">&times;</button>
+            </div>
+          </div>
         </div>
         <div>
           <label for="backInput">Back (answer)</label>
           <textarea id="backInput" placeholder="1989"></textarea>
+          <div class="img-attach" id="backImgAttach">
+            <label class="img-btn" for="backImgFile">+ image</label>
+            <input type="file" id="backImgFile" accept="image/*" hidden>
+            <div class="img-preview" id="backImgPreview" style="display:none;">
+              <img id="backImgThumb" alt="">
+              <button type="button" class="img-remove" id="backImgRemove" title="Remove image">&times;</button>
+            </div>
+          </div>
         </div>
       </div>
       <div class="tag-deck-row">
@@ -408,8 +470,8 @@
   <div id="status"></div>
 
   <footer>
-    Runs entirely in your browser — cards are kept only in this browser's local storage until you export them, and are never sent anywhere.
-    Import the downloaded .apkg via Anki's File → Import.
+    Runs entirely in your browser — cards (and any attached images) are kept only in this browser's local storage until you export them, and are never sent anywhere.
+    Import the downloaded .apkg via Anki's File → Import. Large images may not persist across a page reload if your browser's local storage fills up — export your deck when you're done with a session, just in case.
   </footer>
 </div>
 
@@ -444,6 +506,49 @@
   var bulkInput = document.getElementById("bulkInput");
   var bulkAddBtn = document.getElementById("bulkAddBtn");
 
+  var frontImgFile = document.getElementById("frontImgFile");
+  var backImgFile = document.getElementById("backImgFile");
+  var frontImgPreview = document.getElementById("frontImgPreview");
+  var backImgPreview = document.getElementById("backImgPreview");
+  var frontImgThumb = document.getElementById("frontImgThumb");
+  var backImgThumb = document.getElementById("backImgThumb");
+  var frontImgRemove = document.getElementById("frontImgRemove");
+  var backImgRemove = document.getElementById("backImgRemove");
+
+  var pendingFrontImage = null; // data URL
+  var pendingBackImage = null;
+
+  function wireImageInput(fileInput, previewEl, thumbEl, removeBtn, setter){
+    fileInput.addEventListener("change", function(){
+      var file = fileInput.files && fileInput.files[0];
+      if (!file) return;
+      var reader = new FileReader();
+      reader.onload = function(){
+        setter(reader.result);
+        thumbEl.src = reader.result;
+        previewEl.style.display = "flex";
+      };
+      reader.readAsDataURL(file);
+    });
+    removeBtn.addEventListener("click", function(){
+      setter(null);
+      fileInput.value = "";
+      previewEl.style.display = "none";
+      thumbEl.src = "";
+    });
+  }
+  wireImageInput(frontImgFile, frontImgPreview, frontImgThumb, frontImgRemove, function(v){ pendingFrontImage = v; });
+  wireImageInput(backImgFile, backImgPreview, backImgThumb, backImgRemove, function(v){ pendingBackImage = v; });
+
+  function resetPendingImages(){
+    pendingFrontImage = null;
+    pendingBackImage = null;
+    frontImgFile.value = "";
+    backImgFile.value = "";
+    frontImgPreview.style.display = "none";
+    backImgPreview.style.display = "none";
+  }
+
   var savedDeck = localStorage.getItem(DECK_KEY);
   if (savedDeck) deckNameInput.value = savedDeck;
   deckNameInput.addEventListener("input", function(){
@@ -451,7 +556,11 @@
   });
 
   function persist(){
-    localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    try {
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+    } catch(e) {
+      setStatus("Couldn't save to local storage (likely too many/large images) — export your deck now so you don't lose it on reload.", "err");
+    }
   }
 
   function escapeHtml(s){
@@ -468,9 +577,11 @@
         var el = document.createElement("div");
         el.className = "entry";
         var tagsHtml = c.tags ? '<span class="tags">' + escapeHtml(c.tags) + '</span>' : "";
+        var frontImgHtml = c.frontImage ? '<img class="entry-thumb" src="' + c.frontImage + '" alt="">' : "";
+        var backImgHtml = c.backImage ? '<img class="entry-thumb" src="' + c.backImage + '" alt="">' : "";
         el.innerHTML =
-          '<div class="f">' + escapeHtml(c.front) + tagsHtml + '</div>' +
-          '<div class="b">' + escapeHtml(c.back) + '</div>' +
+          '<div class="f">' + escapeHtml(c.front) + tagsHtml + frontImgHtml + '</div>' +
+          '<div class="b">' + escapeHtml(c.back) + backImgHtml + '</div>' +
           '<button class="remove" title="Remove card" data-idx="' + idx + '">&times;</button>';
         cardStack.appendChild(el);
       });
@@ -487,23 +598,28 @@
     render();
   });
 
-  function addCard(front, back, tags){
+  function addCard(front, back, tags, frontImage, backImage){
     front = (front || "").trim();
     back = (back || "").trim();
-    if (!front || !back) return false;
-    cards.push({ front: front, back: back, tags: (tags || "").trim() });
+    if (!front && !frontImage) return false;
+    if (!back && !backImage) return false;
+    var card = { front: front, back: back, tags: (tags || "").trim() };
+    if (frontImage) card.frontImage = frontImage;
+    if (backImage) card.backImage = backImage;
+    cards.push(card);
     return true;
   }
 
   addCardBtn.addEventListener("click", function(){
-    var ok = addCard(frontInput.value, backInput.value, tagsInput.value);
+    var ok = addCard(frontInput.value, backInput.value, tagsInput.value, pendingFrontImage, pendingBackImage);
     if (!ok){
-      setStatus("A card needs both a front and a back.", "err");
+      setStatus("A card needs a front (text or image) and a back (text or image).", "err");
       return;
     }
     frontInput.value = "";
     backInput.value = "";
     tagsInput.value = "";
+    resetPendingImages();
     frontInput.focus();
     persist();
     render();
@@ -683,6 +799,23 @@
       .replace(/\n/g, '<br>');
   }
 
+  function dataUrlToBytes(dataUrl){
+    var base64 = dataUrl.split(',')[1];
+    var binary = atob(base64);
+    var bytes = new Uint8Array(binary.length);
+    for (var i = 0; i < binary.length; i++) bytes[i] = binary.charCodeAt(i);
+    return bytes;
+  }
+
+  function extFromDataUrl(dataUrl){
+    var m = dataUrl.match(/^data:image\/([a-zA-Z0-9.+-]+);/);
+    if (!m) return 'png';
+    var t = m[1].toLowerCase();
+    if (t === 'jpeg') return 'jpg';
+    if (t === 'svg+xml') return 'svg';
+    return t;
+  }
+
   function getLastItem(obj){
     var keys = Object.keys(obj);
     var lastKey = keys[keys.length - 1];
@@ -713,6 +846,7 @@
     var now = Date.now();
     var topDeckId = getId('cards', 'did', now);
     var topModelId = getId('notes', 'mid', now + 1);
+    var media = []; // {filename, bytes}
 
     var decks = getInitialRowValue('col', 'decks');
     var deck = getLastItem(decks);
@@ -737,6 +871,20 @@
       var noteId = getId('notes', 'id', cardNow);
       var frontHtml = toAnkiHtml(c.front);
       var backHtml = toAnkiHtml(c.back);
+
+      if (c.frontImage){
+        var fExt = extFromDataUrl(c.frontImage);
+        var fFilename = 'img_' + noteId + '_front.' + fExt;
+        media.push({ filename: fFilename, bytes: dataUrlToBytes(c.frontImage) });
+        frontHtml += '<br><img src="' + fFilename + '">';
+      }
+      if (c.backImage){
+        var bExt = extFromDataUrl(c.backImage);
+        var bFilename = 'img_' + noteId + '_back.' + bExt;
+        media.push({ filename: bFilename, bytes: dataUrlToBytes(c.backImage) });
+        backHtml += '<br><img src="' + bFilename + '">';
+      }
+
       var flds = frontHtml + SEP + backHtml;
       var fldsHash = await sha1Hex(flds);
       var strTags = c.tags ? (' ' + c.tags.replace(/,/g, ' ').trim() + ' ') : '';
@@ -759,7 +907,12 @@
 
     var zip = new JSZip();
     zip.file('collection.anki2', binaryArray);
-    zip.file('media', JSON.stringify({}));
+    var mediaManifest = {};
+    media.forEach(function(item, idx){
+      mediaManifest[idx] = item.filename;
+      zip.file(String(idx), item.bytes);
+    });
+    zip.file('media', JSON.stringify(mediaManifest));
     var blob = await zip.generateAsync({ type: 'blob' });
     return blob;
   }
