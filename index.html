@@ -462,6 +462,10 @@
       <label for="deckNameInput">Deck name</label>
       <input type="text" id="deckNameInput" value="My Deck">
     </div>
+    <div class="deck-name-field">
+      <label for="fileNameInput">File name</label>
+      <input type="text" id="fileNameInput" value="my-deck">
+    </div>
     <div style="display:flex; gap:10px; align-items:center;">
       <button class="btn-ghost" id="clearAllBtn">Clear drawer</button>
       <button class="btn-brass" id="exportBtn">Download .apkg</button>
@@ -500,6 +504,7 @@
   var clearAllBtn = document.getElementById("clearAllBtn");
   var exportBtn = document.getElementById("exportBtn");
   var deckNameInput = document.getElementById("deckNameInput");
+  var fileNameInput = document.getElementById("fileNameInput");
   var statusEl = document.getElementById("status");
   var bulkToggle = document.getElementById("bulkToggle");
   var bulkPanel = document.getElementById("bulkPanel");
@@ -551,8 +556,27 @@
 
   var savedDeck = localStorage.getItem(DECK_KEY);
   if (savedDeck) deckNameInput.value = savedDeck;
+
+  var FILE_KEY = "cardCatalog.fileName.v1";
+  var userEditedFileName = false;
+  var savedFile = localStorage.getItem(FILE_KEY);
+  if (savedFile){
+    fileNameInput.value = savedFile;
+    userEditedFileName = true;
+  } else {
+    fileNameInput.value = slugify(deckNameInput.value);
+  }
+
   deckNameInput.addEventListener("input", function(){
     localStorage.setItem(DECK_KEY, deckNameInput.value);
+    if (!userEditedFileName){
+      fileNameInput.value = slugify(deckNameInput.value);
+    }
+  });
+
+  fileNameInput.addEventListener("input", function(){
+    userEditedFileName = true;
+    localStorage.setItem(FILE_KEY, fileNameInput.value);
   });
 
   function persist(){
@@ -913,12 +937,20 @@
       zip.file(String(idx), item.bytes);
     });
     zip.file('media', JSON.stringify(mediaManifest));
-    var blob = await zip.generateAsync({ type: 'blob' });
+    // application/octet-stream (not application/zip) so mobile browsers don't
+    // "correct" the .apkg filename extension to .zip based on the blob's MIME type.
+    var blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
     return blob;
   }
 
   function slugify(name){
     return (name || 'deck').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'deck';
+  }
+
+  function sanitizeFileBase(name){
+    var base = (name || 'deck').trim().replace(/\.apkg$/i, '');
+    base = base.replace(/[\/\\:*?"<>|]+/g, '-').trim();
+    return base || 'deck';
   }
 
   exportBtn.addEventListener('click', async function(){
@@ -927,6 +959,7 @@
       return;
     }
     var deckName = deckNameInput.value.trim() || 'My Deck';
+    var fileBase = sanitizeFileBase(fileNameInput.value || slugify(deckName));
     exportBtn.disabled = true;
     var originalLabel = exportBtn.textContent;
     exportBtn.textContent = 'Building deck…';
@@ -936,12 +969,12 @@
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
       a.href = url;
-      a.download = slugify(deckName) + '.apkg';
+      a.download = fileBase + '.apkg';
       document.body.appendChild(a);
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatus('Downloaded ' + slugify(deckName) + '.apkg — import it via Anki\u2019s File \u2192 Import.', 'ok');
+      setStatus('Downloaded ' + fileBase + '.apkg — import it via Anki\u2019s File \u2192 Import.', 'ok');
     } catch(err){
       console.error(err);
       setStatus('Something went wrong building the deck: ' + err.message, 'err');
