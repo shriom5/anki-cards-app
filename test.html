@@ -18,227 +18,175 @@
 <body>
 <h1>Card Catalog — Unit Tests</h1>
 <div id="output"></div>
-<script>
-(function(){
-"use strict";
-
-// ---- functions under test (kept in sync with index.html) ----
-
-function escapeHtml(s){
-  return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
-}
-
-function toAnkiHtml(text){
-  return text
-    .replace(/&/g,'&amp;')
-    .replace(/</g,'&lt;')
-    .replace(/>/g,'&gt;')
-    .replace(/\n/g,'<br>');
-}
-
-function slugify(name){
-  return (name||'deck').trim().toLowerCase().replace(/[^a-z0-9]+/g,'-').replace(/(^-|-$)/g,'')||'deck';
-}
-
-function sanitizeFileBase(name){
-  var base=(name||'deck').trim().replace(/\.apkg$/i,'');
-  base=base.replace(/[\/\\:*?"<>|]+/g,'-').trim();
-  return base||'deck';
-}
-
-function extFromDataUrl(dataUrl){
-  var m=dataUrl.match(/^data:image\/([a-zA-Z0-9.+-]+);/);
-  if(!m) return 'png';
-  var t=m[1].toLowerCase();
-  if(t==='jpeg') return 'jpg';
-  if(t==='svg+xml') return 'svg';
-  return t;
-}
-
-function checksumFromHex(hex){
-  return parseInt(hex.substr(0,8),16);
-}
-
-// testable version of addCard: takes explicit cards array instead of closure
-function addCard(cards, front, back, tags, frontImages, frontImageIds, backImages, backImageIds){
-  front=(front||'').trim();
-  back=(back||'').trim();
-  if(!front&&(!frontImages||!frontImages.length)) return false;
-  if(!back &&(!backImages ||!backImages.length))  return false;
-  var card={front:front,back:back,tags:(tags||'').trim()};
-  card.frontImages   =(frontImages  ||[]).slice();
-  card.frontImageIds =(frontImageIds||[]).slice();
-  card.backImages    =(backImages   ||[]).slice();
-  card.backImageIds  =(backImageIds ||[]).slice();
-  cards.push(card);
-  return true;
-}
+<script type="module">
+import { escapeHtml, slugify, sanitizeFileBase } from './src/utils.js';
+import { toAnkiHtml, extFromDataUrl, checksumFromHex } from './src/apkg.js';
+import { createCard } from './src/cards.js';
 
 // ---- minimal test runner ----
 
-var suites=[];
-var cur=null;
+const suites = [];
+let cur = null;
 
-function describe(name,fn){ cur={name:name,tests:[]}; suites.push(cur); fn(); }
-function it(name,fn){
-  var r={name:name,pass:false,err:null};
-  try{ fn(); r.pass=true; }catch(e){ r.err=e.message||String(e); }
+function describe(name, fn) { cur = { name, tests: [] }; suites.push(cur); fn(); }
+function it(name, fn) {
+  const r = { name, pass: false, err: null };
+  try { fn(); r.pass = true; } catch (e) { r.err = e.message || String(e); }
   cur.tests.push(r);
 }
-function eq(a,b,msg){
-  if(a!==b) throw new Error((msg?msg+' — ':'')+' expected '+JSON.stringify(b)+', got '+JSON.stringify(a));
+function eq(a, b, msg) {
+  if (a !== b) throw new Error((msg ? msg + ' — ' : '') + ' expected ' + JSON.stringify(b) + ', got ' + JSON.stringify(a));
 }
-function deq(a,b,msg){
-  var as=JSON.stringify(a),bs=JSON.stringify(b);
-  if(as!==bs) throw new Error((msg?msg+' — ':'')+' expected '+bs+', got '+as);
+function deq(a, b, msg) {
+  const as = JSON.stringify(a), bs = JSON.stringify(b);
+  if (as !== bs) throw new Error((msg ? msg + ' — ' : '') + ' expected ' + bs + ', got ' + as);
 }
-function ok(v,msg){ if(!v) throw new Error(msg||'expected truthy, got '+JSON.stringify(v)); }
-function nok(v,msg){ if(v)  throw new Error(msg||'expected falsy, got '+JSON.stringify(v)); }
+function ok(v, msg) { if (!v) throw new Error(msg || 'expected truthy, got ' + JSON.stringify(v)); }
+function nok(v, msg) { if (v) throw new Error(msg || 'expected falsy, got ' + JSON.stringify(v)); }
 
 // ---- suites ----
 
-describe('escapeHtml', function(){
-  it('passes plain text unchanged',   function(){ eq(escapeHtml('hello'),'hello'); });
-  it('escapes &',                     function(){ eq(escapeHtml('a & b'),'a &amp; b'); });
-  it('escapes <',                     function(){ eq(escapeHtml('<tag>'),'&lt;tag&gt;'); });
-  it('escapes >',                     function(){ eq(escapeHtml('x > y'),'x &gt; y'); });
-  it('escapes multiple occurrences',  function(){ eq(escapeHtml('<a & b>'),'&lt;a &amp; b&gt;'); });
-  it('handles empty string',          function(){ eq(escapeHtml(''),''); });
+describe('escapeHtml', function() {
+  it('passes plain text unchanged',   function() { eq(escapeHtml('hello'), 'hello'); });
+  it('escapes &',                     function() { eq(escapeHtml('a & b'), 'a &amp; b'); });
+  it('escapes <',                     function() { eq(escapeHtml('<tag>'), '&lt;tag&gt;'); });
+  it('escapes >',                     function() { eq(escapeHtml('x > y'), 'x &gt; y'); });
+  it('escapes multiple occurrences',  function() { eq(escapeHtml('<a & b>'), '&lt;a &amp; b&gt;'); });
+  it('handles empty string',          function() { eq(escapeHtml(''), ''); });
 });
 
-describe('toAnkiHtml', function(){
-  it('passes plain text unchanged',   function(){ eq(toAnkiHtml('hello'),'hello'); });
-  it('escapes HTML tags',             function(){ eq(toAnkiHtml('<b>x</b>'),'&lt;b&gt;x&lt;/b&gt;'); });
-  it('converts \\n to <br>',         function(){ eq(toAnkiHtml('a\nb'),'a<br>b'); });
-  it('converts multiple newlines',    function(){ eq(toAnkiHtml('a\nb\nc'),'a<br>b<br>c'); });
-  it('escapes & before converting',  function(){ eq(toAnkiHtml('AT&T'),'AT&amp;T'); });
-  it('handles empty string',          function(){ eq(toAnkiHtml(''),''); });
+describe('toAnkiHtml', function() {
+  it('passes plain text unchanged',   function() { eq(toAnkiHtml('hello'), 'hello'); });
+  it('escapes HTML tags',             function() { eq(toAnkiHtml('<b>x</b>'), '&lt;b&gt;x&lt;/b&gt;'); });
+  it('converts \\n to <br>',         function() { eq(toAnkiHtml('a\nb'), 'a<br>b'); });
+  it('converts multiple newlines',    function() { eq(toAnkiHtml('a\nb\nc'), 'a<br>b<br>c'); });
+  it('escapes & before converting',  function() { eq(toAnkiHtml('AT&T'), 'AT&amp;T'); });
+  it('handles empty string',          function() { eq(toAnkiHtml(''), ''); });
 });
 
-describe('slugify', function(){
-  it('lowercases and spaces → dashes',function(){ eq(slugify('My Deck'),'my-deck'); });
-  it('collapses multiple separators', function(){ eq(slugify('hello   world'),'hello-world'); });
-  it('strips leading/trailing dashes',function(){ eq(slugify('  my deck  '),'my-deck'); });
-  it('empty string → deck',           function(){ eq(slugify(''),'deck'); });
-  it('null → deck',                   function(){ eq(slugify(null),'deck'); });
-  it('strips special chars',          function(){ eq(slugify('hello!@world'),'hello-world'); });
-  it('preserves numbers',             function(){ eq(slugify('deck 1'),'deck-1'); });
-  it('all-symbol string → deck',     function(){ eq(slugify('!!!'),'deck'); });
+describe('slugify', function() {
+  it('lowercases and spaces → dashes', function() { eq(slugify('My Deck'), 'my-deck'); });
+  it('collapses multiple separators',  function() { eq(slugify('hello   world'), 'hello-world'); });
+  it('strips leading/trailing dashes', function() { eq(slugify('  my deck  '), 'my-deck'); });
+  it('empty string → deck',            function() { eq(slugify(''), 'deck'); });
+  it('null → deck',                    function() { eq(slugify(null), 'deck'); });
+  it('strips special chars',           function() { eq(slugify('hello!@world'), 'hello-world'); });
+  it('preserves numbers',              function() { eq(slugify('deck 1'), 'deck-1'); });
+  it('all-symbol string → deck',      function() { eq(slugify('!!!'), 'deck'); });
 });
 
-describe('sanitizeFileBase', function(){
-  it('passes clean names through',    function(){ eq(sanitizeFileBase('my-deck'),'my-deck'); });
-  it('strips .apkg extension',        function(){ eq(sanitizeFileBase('my-deck.apkg'),'my-deck'); });
-  it('strips .APKG (case-insensitive)',function(){ eq(sanitizeFileBase('deck.APKG'),'deck'); });
-  it('empty string → deck',           function(){ eq(sanitizeFileBase(''),'deck'); });
-  it('null → deck',                   function(){ eq(sanitizeFileBase(null),'deck'); });
-  it('replaces / with -',             function(){ eq(sanitizeFileBase('path/to/deck'),'path-to-deck'); });
-  it('replaces : with -',             function(){ eq(sanitizeFileBase('my:deck'),'my-deck'); });
-  it('collapses consecutive bad chars',function(){ eq(sanitizeFileBase('a//b'),'a-b'); });
+describe('sanitizeFileBase', function() {
+  it('passes clean names through',     function() { eq(sanitizeFileBase('my-deck'), 'my-deck'); });
+  it('strips .apkg extension',         function() { eq(sanitizeFileBase('my-deck.apkg'), 'my-deck'); });
+  it('strips .APKG (case-insensitive)',function() { eq(sanitizeFileBase('deck.APKG'), 'deck'); });
+  it('empty string → deck',            function() { eq(sanitizeFileBase(''), 'deck'); });
+  it('null → deck',                    function() { eq(sanitizeFileBase(null), 'deck'); });
+  it('replaces / with -',              function() { eq(sanitizeFileBase('path/to/deck'), 'path-to-deck'); });
+  it('replaces : with -',              function() { eq(sanitizeFileBase('my:deck'), 'my-deck'); });
+  it('collapses consecutive bad chars',function() { eq(sanitizeFileBase('a//b'), 'a-b'); });
 });
 
-describe('extFromDataUrl', function(){
-  it('jpeg → jpg',   function(){ eq(extFromDataUrl('data:image/jpeg;base64,abc'),'jpg'); });
-  it('png → png',    function(){ eq(extFromDataUrl('data:image/png;base64,abc'),'png'); });
-  it('gif → gif',    function(){ eq(extFromDataUrl('data:image/gif;base64,abc'),'gif'); });
-  it('webp → webp',  function(){ eq(extFromDataUrl('data:image/webp;base64,abc'),'webp'); });
-  it('svg+xml → svg',function(){ eq(extFromDataUrl('data:image/svg+xml;base64,abc'),'svg'); });
-  it('unknown → png',function(){ eq(extFromDataUrl('not-a-data-url'),'png'); });
-  it('case-insensitive JPEG',function(){ eq(extFromDataUrl('data:image/JPEG;base64,abc'),'jpg'); });
+describe('extFromDataUrl', function() {
+  it('jpeg → jpg',    function() { eq(extFromDataUrl('data:image/jpeg;base64,abc'), 'jpg'); });
+  it('png → png',     function() { eq(extFromDataUrl('data:image/png;base64,abc'), 'png'); });
+  it('gif → gif',     function() { eq(extFromDataUrl('data:image/gif;base64,abc'), 'gif'); });
+  it('webp → webp',   function() { eq(extFromDataUrl('data:image/webp;base64,abc'), 'webp'); });
+  it('svg+xml → svg', function() { eq(extFromDataUrl('data:image/svg+xml;base64,abc'), 'svg'); });
+  it('unknown → png', function() { eq(extFromDataUrl('not-a-data-url'), 'png'); });
+  it('case-insensitive JPEG', function() { eq(extFromDataUrl('data:image/JPEG;base64,abc'), 'jpg'); });
 });
 
-describe('checksumFromHex', function(){
-  it('parses first 8 hex chars',     function(){ eq(checksumFromHex('deadbeef00000000'),0xdeadbeef); });
-  it('ignores chars beyond 8',       function(){ eq(checksumFromHex('00000001ffffffff'),1); });
-  it('handles all zeros',            function(){ eq(checksumFromHex('00000000'),0); });
-  it('handles max 32-bit value',     function(){ eq(checksumFromHex('ffffffff'),0xffffffff); });
+describe('checksumFromHex', function() {
+  it('parses first 8 hex chars',  function() { eq(checksumFromHex('deadbeef00000000'), 0xdeadbeef); });
+  it('ignores chars beyond 8',    function() { eq(checksumFromHex('00000001ffffffff'), 1); });
+  it('handles all zeros',         function() { eq(checksumFromHex('00000000'), 0); });
+  it('handles max 32-bit value',  function() { eq(checksumFromHex('ffffffff'), 0xffffffff); });
 });
 
-describe('addCard — validation', function(){
-  it('rejects empty front and back',  function(){ var c=[]; nok(addCard(c,'','','')); eq(c.length,0); });
-  it('rejects empty front, no image', function(){ var c=[]; nok(addCard(c,'','back','')); eq(c.length,0); });
-  it('rejects empty back, no image',  function(){ var c=[]; nok(addCard(c,'front','','')); eq(c.length,0); });
-  it('accepts text front and back',   function(){ var c=[]; ok(addCard(c,'Q','A','')); eq(c.length,1); });
-  it('trims front whitespace',        function(){ var c=[]; addCard(c,'  Q  ','A',''); eq(c[0].front,'Q'); });
-  it('trims back whitespace',         function(){ var c=[]; addCard(c,'Q','  A  ',''); eq(c[0].back,'A'); });
-  it('stores tags',                   function(){ var c=[]; addCard(c,'Q','A','t1 t2'); eq(c[0].tags,'t1 t2'); });
-  it('allows image-only front',       function(){ var c=[]; ok(addCard(c,'','A','',['data:image/png;base64,a'],[])); });
-  it('allows image-only back',        function(){ var c=[]; ok(addCard(c,'Q','','', [],[],['data:image/png;base64,b'],[])); });
+describe('createCard — validation', function() {
+  it('rejects empty front and back',  function() { nok(createCard('', '', '')); });
+  it('rejects empty front, no image', function() { nok(createCard('', 'back', '')); });
+  it('rejects empty back, no image',  function() { nok(createCard('front', '', '')); });
+  it('accepts text front and back',   function() { ok(createCard('Q', 'A', '')); });
+  it('trims front whitespace',        function() { const c = createCard('  Q  ', 'A', ''); eq(c.front, 'Q'); });
+  it('trims back whitespace',         function() { const c = createCard('Q', '  A  ', ''); eq(c.back, 'A'); });
+  it('stores tags',                   function() { const c = createCard('Q', 'A', 't1 t2'); eq(c.tags, 't1 t2'); });
+  it('allows image-only front',       function() { ok(createCard('', 'A', '', ['data:image/png;base64,a'], [])); });
+  it('allows image-only back',        function() { ok(createCard('Q', '', '', [], [], ['data:image/png;base64,b'], [])); });
 });
 
-describe('addCard — multi-image storage', function(){
-  it('stores multiple front images', function(){
-    var c=[], imgs=['data:image/png;base64,a','data:image/png;base64,b'];
-    addCard(c,'Q','A','',imgs,['id1','id2'],[],[]);
-    deq(c[0].frontImages,imgs);
+describe('createCard — multi-image storage', function() {
+  it('stores multiple front images', function() {
+    const imgs = ['data:image/png;base64,a', 'data:image/png;base64,b'];
+    const c = createCard('Q', 'A', '', imgs, ['id1', 'id2'], [], []);
+    deq(c.frontImages, imgs);
   });
-  it('stores front image IDs', function(){
-    var c=[], imgs=['data:image/png;base64,a'];
-    addCard(c,'Q','A','',imgs,['img_abc'],[],[]);
-    deq(c[0].frontImageIds,['img_abc']);
+  it('stores front image IDs', function() {
+    const imgs = ['data:image/png;base64,a'];
+    const c = createCard('Q', 'A', '', imgs, ['img_abc'], [], []);
+    deq(c.frontImageIds, ['img_abc']);
   });
-  it('stores multiple back images', function(){
-    var c=[], imgs=['data:image/png;base64,c','data:image/png;base64,d'];
-    addCard(c,'Q','A','', [],[],imgs,['id3','id4']);
-    deq(c[0].backImages,imgs);
+  it('stores multiple back images', function() {
+    const imgs = ['data:image/png;base64,c', 'data:image/png;base64,d'];
+    const c = createCard('Q', 'A', '', [], [], imgs, ['id3', 'id4']);
+    deq(c.backImages, imgs);
   });
-  it('stores back image IDs', function(){
-    var c=[], imgs=['data:image/png;base64,c'];
-    addCard(c,'Q','A','', [],[],imgs,['img_xyz']);
-    deq(c[0].backImageIds,['img_xyz']);
+  it('stores back image IDs', function() {
+    const imgs = ['data:image/png;base64,c'];
+    const c = createCard('Q', 'A', '', [], [], imgs, ['img_xyz']);
+    deq(c.backImageIds, ['img_xyz']);
   });
-  it('slices image arrays — mutations do not affect stored card', function(){
-    var c=[], imgs=['data:image/png;base64,x'], ids=['id1'];
-    addCard(c,'Q','A','',imgs,ids,[],[]);
+  it('slices image arrays — mutations do not affect stored card', function() {
+    const imgs = ['data:image/png;base64,x'], ids = ['id1'];
+    const c = createCard('Q', 'A', '', imgs, ids, [], []);
     imgs.push('data:image/png;base64,y');
     ids.push('id2');
-    eq(c[0].frontImages.length,1);
-    eq(c[0].frontImageIds.length,1);
+    eq(c.frontImages.length, 1);
+    eq(c.frontImageIds.length, 1);
   });
-  it('stores empty arrays when no images', function(){
-    var c=[]; addCard(c,'Q','A','', [],[],[],[]);
-    deq(c[0].frontImages,[]);
-    deq(c[0].frontImageIds,[]);
-    deq(c[0].backImages,[]);
-    deq(c[0].backImageIds,[]);
+  it('stores empty arrays when no images', function() {
+    const c = createCard('Q', 'A', '', [], [], [], []);
+    deq(c.frontImages, []);
+    deq(c.frontImageIds, []);
+    deq(c.backImages, []);
+    deq(c.backImageIds, []);
   });
-  it('stores empty-text card with two front images', function(){
-    var c=[], imgs=['data:image/png;base64,1','data:image/png;base64,2'];
-    ok(addCard(c,'','back','',imgs,['a','b'],[],[]));
-    eq(c[0].frontImages.length,2);
-    eq(c[0].frontImageIds.length,2);
+  it('stores empty-text card with two front images', function() {
+    const imgs = ['data:image/png;base64,1', 'data:image/png;base64,2'];
+    const c = createCard('', 'back', '', imgs, ['a', 'b'], [], []);
+    ok(c);
+    eq(c.frontImages.length, 2);
+    eq(c.frontImageIds.length, 2);
   });
 });
 
 // ---- render results ----
 
-var out=document.getElementById('output');
-var totalPass=0, totalFail=0;
+const out = document.getElementById('output');
+let totalPass = 0, totalFail = 0;
 
-suites.forEach(function(suite){
-  var wrap=document.createElement('div');
-  wrap.className='suite';
-  var title=document.createElement('div');
-  title.className='suite-name';
-  title.textContent=suite.name;
+suites.forEach(function(suite) {
+  const wrap = document.createElement('div');
+  wrap.className = 'suite';
+  const title = document.createElement('div');
+  title.className = 'suite-name';
+  title.textContent = suite.name;
   wrap.appendChild(title);
-  suite.tests.forEach(function(t){
-    var el=document.createElement('div');
-    el.className='test '+(t.pass?'pass':'fail');
-    el.textContent=(t.pass?'✓ ':'✗ ')+t.name+(t.err?' — '+t.err:'');
+  suite.tests.forEach(function(t) {
+    const el = document.createElement('div');
+    el.className = 'test ' + (t.pass ? 'pass' : 'fail');
+    el.textContent = (t.pass ? '✓ ' : '✗ ') + t.name + (t.err ? ' — ' + t.err : '');
     wrap.appendChild(el);
-    if(t.pass) totalPass++; else totalFail++;
+    if (t.pass) totalPass++; else totalFail++;
   });
   out.appendChild(wrap);
 });
 
-var summary=document.createElement('div');
-summary.className='summary';
-summary.innerHTML='<span class="ok">'+totalPass+' passed</span>'+
-  (totalFail?' &nbsp;<span class="err">'+totalFail+' failed</span>':'');
+const summary = document.createElement('div');
+summary.className = 'summary';
+summary.innerHTML = '<span class="ok">' + totalPass + ' passed</span>' +
+  (totalFail ? ' &nbsp;<span class="err">' + totalFail + ' failed</span>' : '');
 out.appendChild(summary);
-
-})();
 </script>
 </body>
 </html>
