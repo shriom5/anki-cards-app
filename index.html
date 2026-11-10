@@ -619,8 +619,10 @@
   function persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+      return true;
     } catch(e) {
-      setStatus("Couldn't save to local storage (likely too many/large images) — export now so you don't lose it on reload.", "err");
+      setStatus("Card NOT saved — local storage is full (too many/large images). Export your deck now before closing or refreshing this tab.", "err");
+      return false;
     }
   }
 
@@ -693,9 +695,9 @@
     tagsInput.value  = "";
     resetPendingImages();
     frontInput.focus();
-    persist();
+    var saved = persist();
     render();
-    setStatus("Card filed.", "ok");
+    if (saved) setStatus("Card filed.", "ok");
   });
 
   [frontInput, backInput].forEach(function(el) {
@@ -724,9 +726,9 @@
     });
     if (added > 0) {
       bulkInput.value = "";
-      persist();
+      var saved = persist();
       render();
-      setStatus(added + " card" + (added === 1 ? "" : "s") + " added from paste.", "ok");
+      if (saved) setStatus(added + " card" + (added === 1 ? "" : "s") + " added from paste.", "ok");
     } else {
       setStatus("Couldn't find any front | back pairs in that text.", "err");
     }
