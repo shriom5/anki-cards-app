@@ -76,7 +76,6 @@
     color: #cbb99e;
   }
 
-  /* ---- the index card (input form) ---- */
   .catalog-card{
     background: var(--card);
     color: var(--ink);
@@ -185,7 +184,7 @@
     color:#cbb99e;
     font-family:"IBM Plex Mono", monospace;
     font-size:12px;
-    text-decoration underline;
+    text-decoration: underline;
     text-underline-offset:3px;
     cursor:pointer;
     padding:0;
@@ -233,37 +232,46 @@
     cursor:pointer;
   }
   .img-btn:hover{border-color: var(--brass-dark); color: var(--brass-dark);}
-  .img-preview{
+
+  .img-gallery{
     display:flex;
-    align-items:center;
-    gap:10px;
+    flex-wrap:wrap;
+    gap:8px;
     margin-top:8px;
   }
-  .img-preview img{
-    max-width:72px;
-    max-height:72px;
-    border:1px solid rgba(36,27,18,.2);
-    border-radius:1px;
-    object-fit:cover;
+  .img-gallery-item{
+    position:relative;
+    display:inline-block;
   }
-  .img-remove{
-    background:none;
-    border:none;
-    color: var(--margin);
-    font-size:16px;
-    cursor:pointer;
-    line-height:1;
-    padding:2px 6px;
-  }
-  .entry-thumb{
-    max-width:56px;
-    max-height:56px;
-    border:1px solid rgba(36,27,18,.2);
-    border-radius:1px;
-    object-fit:cover;
+  .img-gallery-item img{
     display:block;
-    margin-top:6px;
+    width:64px;
+    height:64px;
+    object-fit:cover;
+    border:1px solid rgba(36,27,18,.2);
+    border-radius:1px;
   }
+  .img-gallery-item .img-remove{
+    position:absolute;
+    top:-7px;
+    right:-7px;
+    background: var(--margin);
+    color:#fff;
+    border:none;
+    border-radius:50%;
+    width:18px;
+    height:18px;
+    font-size:13px;
+    line-height:1;
+    cursor:pointer;
+    padding:0;
+    display:flex;
+    align-items:center;
+    justify-content:center;
+    font-family:sans-serif;
+    font-weight:700;
+  }
+  .img-gallery-item .img-remove:hover{background:#7a2d2b;}
 
   /* ---- drawer / deck section ---- */
   .drawer-head{
@@ -299,7 +307,7 @@
     display:grid;
     grid-template-columns: 1fr 1fr auto;
     gap:16px;
-    align-items:center;
+    align-items:start;
     box-shadow: 2px 3px 0 rgba(0,0,0,.22);
     border-left: 3px solid var(--margin);
   }
@@ -322,6 +330,20 @@
     font-size:11px;
     color:var(--brass-dark);
     margin-top:4px;
+  }
+  .entry-thumbs{
+    display:flex;
+    flex-wrap:wrap;
+    gap:4px;
+    margin-top:6px;
+  }
+  .entry-thumb{
+    width:48px;
+    height:48px;
+    object-fit:cover;
+    border:1px solid rgba(36,27,18,.2);
+    border-radius:1px;
+    display:block;
   }
   .entry .remove{
     background:none;
@@ -405,25 +427,19 @@
         <div>
           <label for="frontInput">Front (question)</label>
           <textarea id="frontInput" placeholder="What year did the Berlin Wall fall?"></textarea>
-          <div class="img-attach" id="frontImgAttach">
-            <label class="img-btn" for="frontImgFile">+ image</label>
+          <div class="img-attach">
+            <label class="img-btn" for="frontImgFile">+ add image</label>
             <input type="file" id="frontImgFile" accept="image/*" hidden>
-            <div class="img-preview" id="frontImgPreview" style="display:none;">
-              <img id="frontImgThumb" alt="">
-              <button type="button" class="img-remove" id="frontImgRemove" title="Remove image">&times;</button>
-            </div>
+            <div class="img-gallery" id="frontImgGallery"></div>
           </div>
         </div>
         <div>
           <label for="backInput">Back (answer)</label>
           <textarea id="backInput" placeholder="1989"></textarea>
-          <div class="img-attach" id="backImgAttach">
-            <label class="img-btn" for="backImgFile">+ image</label>
+          <div class="img-attach">
+            <label class="img-btn" for="backImgFile">+ add image</label>
             <input type="file" id="backImgFile" accept="image/*" hidden>
-            <div class="img-preview" id="backImgPreview" style="display:none;">
-              <img id="backImgThumb" alt="">
-              <button type="button" class="img-remove" id="backImgRemove" title="Remove image">&times;</button>
-            </div>
+            <div class="img-gallery" id="backImgGallery"></div>
           </div>
         </div>
       </div>
@@ -487,6 +503,7 @@
 
   var STORAGE_KEY = "cardCatalog.cards.v1";
   var DECK_KEY = "cardCatalog.deckName.v1";
+  var FILE_KEY = "cardCatalog.fileName.v1";
 
   var cards = [];
   try {
@@ -494,73 +511,93 @@
     if (saved) cards = JSON.parse(saved);
   } catch(e) { cards = []; }
 
-  var frontInput = document.getElementById("frontInput");
-  var backInput = document.getElementById("backInput");
-  var tagsInput = document.getElementById("tagsInput");
-  var addCardBtn = document.getElementById("addCardBtn");
-  var cardStack = document.getElementById("cardStack");
-  var emptyState = document.getElementById("emptyState");
-  var countTag = document.getElementById("countTag");
-  var clearAllBtn = document.getElementById("clearAllBtn");
-  var exportBtn = document.getElementById("exportBtn");
-  var deckNameInput = document.getElementById("deckNameInput");
-  var fileNameInput = document.getElementById("fileNameInput");
-  var statusEl = document.getElementById("status");
-  var bulkToggle = document.getElementById("bulkToggle");
-  var bulkPanel = document.getElementById("bulkPanel");
-  var bulkInput = document.getElementById("bulkInput");
-  var bulkAddBtn = document.getElementById("bulkAddBtn");
+  var frontInput     = document.getElementById("frontInput");
+  var backInput      = document.getElementById("backInput");
+  var tagsInput      = document.getElementById("tagsInput");
+  var addCardBtn     = document.getElementById("addCardBtn");
+  var cardStack      = document.getElementById("cardStack");
+  var emptyState     = document.getElementById("emptyState");
+  var countTag       = document.getElementById("countTag");
+  var clearAllBtn    = document.getElementById("clearAllBtn");
+  var exportBtn      = document.getElementById("exportBtn");
+  var deckNameInput  = document.getElementById("deckNameInput");
+  var fileNameInput  = document.getElementById("fileNameInput");
+  var statusEl       = document.getElementById("status");
+  var bulkToggle     = document.getElementById("bulkToggle");
+  var bulkPanel      = document.getElementById("bulkPanel");
+  var bulkInput      = document.getElementById("bulkInput");
+  var bulkAddBtn     = document.getElementById("bulkAddBtn");
+  var frontImgFile   = document.getElementById("frontImgFile");
+  var backImgFile    = document.getElementById("backImgFile");
+  var frontImgGallery = document.getElementById("frontImgGallery");
+  var backImgGallery  = document.getElementById("backImgGallery");
 
-  var frontImgFile = document.getElementById("frontImgFile");
-  var backImgFile = document.getElementById("backImgFile");
-  var frontImgPreview = document.getElementById("frontImgPreview");
-  var backImgPreview = document.getElementById("backImgPreview");
-  var frontImgThumb = document.getElementById("frontImgThumb");
-  var backImgThumb = document.getElementById("backImgThumb");
-  var frontImgRemove = document.getElementById("frontImgRemove");
-  var backImgRemove = document.getElementById("backImgRemove");
+  var pendingFrontImages = [];
+  var pendingBackImages  = [];
 
-  var pendingFrontImage = null; // data URL
-  var pendingBackImage = null;
+  // ---- image gallery ----
 
-  function wireImageInput(fileInput, previewEl, thumbEl, removeBtn, setter){
+  function renderGallery(galleryEl, imagesArr) {
+    galleryEl.innerHTML = "";
+    imagesArr.forEach(function(dataUrl, idx) {
+      var item = document.createElement("div");
+      item.className = "img-gallery-item";
+      var img = document.createElement("img");
+      img.src = dataUrl;
+      img.alt = "";
+      var btn = document.createElement("button");
+      btn.type = "button";
+      btn.className = "img-remove";
+      btn.title = "Remove";
+      btn.setAttribute("data-idx", idx);
+      btn.textContent = "×";
+      item.appendChild(img);
+      item.appendChild(btn);
+      galleryEl.appendChild(item);
+    });
+  }
+
+  function wireImageInput(fileInput, galleryEl, imagesArr) {
     fileInput.addEventListener("change", function(){
       var file = fileInput.files && fileInput.files[0];
       if (!file) return;
       var reader = new FileReader();
       reader.onload = function(){
-        setter(reader.result);
-        thumbEl.src = reader.result;
-        previewEl.style.display = "flex";
+        imagesArr.push(reader.result);
+        fileInput.value = "";
+        renderGallery(galleryEl, imagesArr);
       };
       reader.readAsDataURL(file);
     });
-    removeBtn.addEventListener("click", function(){
-      setter(null);
-      fileInput.value = "";
-      previewEl.style.display = "none";
-      thumbEl.src = "";
+    galleryEl.addEventListener("click", function(e) {
+      var btn = e.target.closest(".img-remove");
+      if (!btn) return;
+      var idx = parseInt(btn.getAttribute("data-idx"), 10);
+      imagesArr.splice(idx, 1);
+      renderGallery(galleryEl, imagesArr);
     });
   }
-  wireImageInput(frontImgFile, frontImgPreview, frontImgThumb, frontImgRemove, function(v){ pendingFrontImage = v; });
-  wireImageInput(backImgFile, backImgPreview, backImgThumb, backImgRemove, function(v){ pendingBackImage = v; });
 
-  function resetPendingImages(){
-    pendingFrontImage = null;
-    pendingBackImage = null;
+  wireImageInput(frontImgFile, frontImgGallery, pendingFrontImages);
+  wireImageInput(backImgFile,  backImgGallery,  pendingBackImages);
+
+  function resetPendingImages() {
+    pendingFrontImages.length = 0;
+    pendingBackImages.length  = 0;
     frontImgFile.value = "";
-    backImgFile.value = "";
-    frontImgPreview.style.display = "none";
-    backImgPreview.style.display = "none";
+    backImgFile.value  = "";
+    renderGallery(frontImgGallery, pendingFrontImages);
+    renderGallery(backImgGallery,  pendingBackImages);
   }
+
+  // ---- deck / file name persistence ----
 
   var savedDeck = localStorage.getItem(DECK_KEY);
   if (savedDeck) deckNameInput.value = savedDeck;
 
-  var FILE_KEY = "cardCatalog.fileName.v1";
   var userEditedFileName = false;
   var savedFile = localStorage.getItem(FILE_KEY);
-  if (savedFile){
+  if (savedFile) {
     fileNameInput.value = savedFile;
     userEditedFileName = true;
   } else {
@@ -569,9 +606,7 @@
 
   deckNameInput.addEventListener("input", function(){
     localStorage.setItem(DECK_KEY, deckNameInput.value);
-    if (!userEditedFileName){
-      fileNameInput.value = slugify(deckNameInput.value);
-    }
+    if (!userEditedFileName) fileNameInput.value = slugify(deckNameInput.value);
   });
 
   fileNameInput.addEventListener("input", function(){
@@ -579,33 +614,46 @@
     localStorage.setItem(FILE_KEY, fileNameInput.value);
   });
 
-  function persist(){
+  // ---- card model ----
+
+  function persist() {
     try {
       localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
     } catch(e) {
-      setStatus("Couldn't save to local storage (likely too many/large images) — export your deck now so you don't lose it on reload.", "err");
+      setStatus("Couldn't save to local storage (likely too many/large images) — export now so you don't lose it on reload.", "err");
     }
   }
 
-  function escapeHtml(s){
+  function escapeHtml(s) {
     return s.replace(/&/g,"&amp;").replace(/</g,"&lt;").replace(/>/g,"&gt;");
   }
 
-  function render(){
+  function render() {
     cardStack.innerHTML = "";
-    if (cards.length === 0){
+    if (cards.length === 0) {
       emptyState.style.display = "block";
     } else {
       emptyState.style.display = "none";
-      cards.forEach(function(c, idx){
+      cards.forEach(function(c, idx) {
+        // support both old single-image and new multi-image storage format
+        var frontImgs = c.frontImages || (c.frontImage ? [c.frontImage] : []);
+        var backImgs  = c.backImages  || (c.backImage  ? [c.backImage]  : []);
+
+        var tagsHtml = c.tags
+          ? '<span class="tags">' + escapeHtml(c.tags) + '</span>'
+          : "";
+        var frontThumbsHtml = frontImgs.length
+          ? '<div class="entry-thumbs">' + frontImgs.map(function(s){ return '<img class="entry-thumb" src="' + s + '" alt="">'; }).join('') + '</div>'
+          : "";
+        var backThumbsHtml = backImgs.length
+          ? '<div class="entry-thumbs">' + backImgs.map(function(s){ return '<img class="entry-thumb" src="' + s + '" alt="">'; }).join('') + '</div>'
+          : "";
+
         var el = document.createElement("div");
         el.className = "entry";
-        var tagsHtml = c.tags ? '<span class="tags">' + escapeHtml(c.tags) + '</span>' : "";
-        var frontImgHtml = c.frontImage ? '<img class="entry-thumb" src="' + c.frontImage + '" alt="">' : "";
-        var backImgHtml = c.backImage ? '<img class="entry-thumb" src="' + c.backImage + '" alt="">' : "";
         el.innerHTML =
-          '<div class="f">' + escapeHtml(c.front) + tagsHtml + frontImgHtml + '</div>' +
-          '<div class="b">' + escapeHtml(c.back) + backImgHtml + '</div>' +
+          '<div class="f">' + escapeHtml(c.front) + tagsHtml + frontThumbsHtml + '</div>' +
+          '<div class="b">' + escapeHtml(c.back)  + backThumbsHtml + '</div>' +
           '<button class="remove" title="Remove card" data-idx="' + idx + '">&times;</button>';
         cardStack.appendChild(el);
       });
@@ -613,7 +661,7 @@
     countTag.textContent = cards.length + (cards.length === 1 ? " card" : " cards");
   }
 
-  cardStack.addEventListener("click", function(e){
+  cardStack.addEventListener("click", function(e) {
     var btn = e.target.closest(".remove");
     if (!btn) return;
     var idx = parseInt(btn.getAttribute("data-idx"), 10);
@@ -622,27 +670,27 @@
     render();
   });
 
-  function addCard(front, back, tags, frontImage, backImage){
+  function addCard(front, back, tags, frontImages, backImages) {
     front = (front || "").trim();
-    back = (back || "").trim();
-    if (!front && !frontImage) return false;
-    if (!back && !backImage) return false;
+    back  = (back  || "").trim();
+    if (!front && (!frontImages || !frontImages.length)) return false;
+    if (!back  && (!backImages  || !backImages.length))  return false;
     var card = { front: front, back: back, tags: (tags || "").trim() };
-    if (frontImage) card.frontImage = frontImage;
-    if (backImage) card.backImage = backImage;
+    if (frontImages && frontImages.length) card.frontImages = frontImages.slice();
+    if (backImages  && backImages.length)  card.backImages  = backImages.slice();
     cards.push(card);
     return true;
   }
 
   addCardBtn.addEventListener("click", function(){
-    var ok = addCard(frontInput.value, backInput.value, tagsInput.value, pendingFrontImage, pendingBackImage);
-    if (!ok){
+    var ok = addCard(frontInput.value, backInput.value, tagsInput.value, pendingFrontImages, pendingBackImages);
+    if (!ok) {
       setStatus("A card needs a front (text or image) and a back (text or image).", "err");
       return;
     }
     frontInput.value = "";
-    backInput.value = "";
-    tagsInput.value = "";
+    backInput.value  = "";
+    tagsInput.value  = "";
     resetPendingImages();
     frontInput.focus();
     persist();
@@ -650,9 +698,9 @@
     setStatus("Card filed.", "ok");
   });
 
-  [frontInput, backInput].forEach(function(el){
-    el.addEventListener("keydown", function(e){
-      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)){
+  [frontInput, backInput].forEach(function(el) {
+    el.addEventListener("keydown", function(e) {
+      if (e.key === "Enter" && (e.metaKey || e.ctrlKey)) {
         e.preventDefault();
         addCardBtn.click();
       }
@@ -671,10 +719,10 @@
       var parts = line.includes("\t") ? line.split("\t") : line.split("|");
       if (parts.length < 2) return;
       var front = parts[0];
-      var back = parts.slice(1).join(parts[0].includes("\t") ? "\t" : "|");
+      var back  = parts.slice(1).join(parts[0].includes("\t") ? "\t" : "|");
       if (addCard(front, back, "")) added++;
     });
-    if (added > 0){
+    if (added > 0) {
       bulkInput.value = "";
       persist();
       render();
@@ -693,12 +741,12 @@
     setStatus("Drawer cleared.", "ok");
   });
 
-  function setStatus(msg, cls){
+  function setStatus(msg, cls) {
     statusEl.textContent = msg;
     statusEl.className = cls || "";
   }
 
-  // ---------------- .apkg generation ----------------
+  // ---- .apkg generation ----
 
   var TEMPLATE_SQL = [
     'PRAGMA foreign_keys=OFF;',
@@ -797,25 +845,21 @@
     locateFile: function(file){ return 'https://cdn.jsdelivr.net/npm/sql.js@1.14.2/dist/' + file; }
   });
 
-  function sha1Hex(str){
+  function sha1Hex(str) {
     var enc = new TextEncoder().encode(str);
     return crypto.subtle.digest('SHA-1', enc).then(function(buf){
       var bytes = new Uint8Array(buf);
       var hex = '';
-      for (var i = 0; i < bytes.length; i++){
-        hex += bytes[i].toString(16).padStart(2, '0');
-      }
+      for (var i = 0; i < bytes.length; i++) hex += bytes[i].toString(16).padStart(2, '0');
       return hex;
     });
   }
 
-  function checksumFromHex(hex){
+  function checksumFromHex(hex) {
     return parseInt(hex.substr(0, 8), 16);
   }
 
-  // Anki fields are rendered as HTML, so plain-text input needs escaping
-  // and newlines need to become <br> or they'll be silently collapsed.
-  function toAnkiHtml(text){
+  function toAnkiHtml(text) {
     return text
       .replace(/&/g, '&amp;')
       .replace(/</g, '&lt;')
@@ -823,7 +867,7 @@
       .replace(/\n/g, '<br>');
   }
 
-  function dataUrlToBytes(dataUrl){
+  function dataUrlToBytes(dataUrl) {
     var base64 = dataUrl.split(',')[1];
     var binary = atob(base64);
     var bytes = new Uint8Array(binary.length);
@@ -831,7 +875,7 @@
     return bytes;
   }
 
-  function extFromDataUrl(dataUrl){
+  function extFromDataUrl(dataUrl) {
     var m = dataUrl.match(/^data:image\/([a-zA-Z0-9.+-]+);/);
     if (!m) return 'png';
     var t = m[1].toLowerCase();
@@ -840,7 +884,17 @@
     return t;
   }
 
-  function getLastItem(obj){
+  function slugify(name) {
+    return (name || 'deck').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'deck';
+  }
+
+  function sanitizeFileBase(name) {
+    var base = (name || 'deck').trim().replace(/\.apkg$/i, '');
+    base = base.replace(/[\/\\:*?"<>|]+/g, '-').trim();
+    return base || 'deck';
+  }
+
+  function getLastItem(obj) {
     var keys = Object.keys(obj);
     var lastKey = keys[keys.length - 1];
     var item = obj[lastKey];
@@ -848,13 +902,13 @@
     return item;
   }
 
-  async function buildApkg(deckName, cardList){
+  async function buildApkg(deckName, cardList) {
     var SQL = await sqlJsReady;
     var db = new SQL.Database();
     db.run(TEMPLATE_SQL);
-    var SEP = "\u001F";
+    var SEP = "";
 
-    function getId(table, col, ts){
+    function getId(table, col, ts) {
       var stmt = db.prepare('SELECT ' + col + ' as v from ' + table + ' WHERE ' + col + ' >= :ts ORDER BY ' + col + ' DESC LIMIT 1');
       stmt.bind({':ts': ts});
       var v = null;
@@ -862,15 +916,15 @@
       stmt.free();
       return v ? (+v + 1) : ts;
     }
-    function getInitialRowValue(table, col){
+    function getInitialRowValue(table, col) {
       var res = db.exec('select ' + col + ' from ' + table);
       return JSON.parse(res[0].values[0][0]);
     }
 
     var now = Date.now();
-    var topDeckId = getId('cards', 'did', now);
+    var topDeckId  = getId('cards', 'did', now);
     var topModelId = getId('notes', 'mid', now + 1);
-    var media = []; // {filename, bytes}
+    var media = [];
 
     var decks = getInitialRowValue('col', 'decks');
     var deck = getLastItem(decks);
@@ -882,32 +936,37 @@
     var models = getInitialRowValue('col', 'models');
     var model = getLastItem(models);
     model.name = deckName;
-    model.did = topDeckId;
-    model.id = topModelId;
+    model.did  = topDeckId;
+    model.id   = topModelId;
     models[String(topModelId)] = model;
     db.run('update col set models=? where id=1', [JSON.stringify(models)]);
 
-    for (var i = 0; i < cardList.length; i++){
+    for (var i = 0; i < cardList.length; i++) {
       var c = cardList[i];
-      var cardNow = Date.now() + i; // keep strictly increasing even within the same millisecond
+      var cardNow = Date.now() + i;
       var guidHex = await sha1Hex(topDeckId + c.front + c.back + i);
       var noteGuid = guidHex.substring(0, 10);
       var noteId = getId('notes', 'id', cardNow);
       var frontHtml = toAnkiHtml(c.front);
-      var backHtml = toAnkiHtml(c.back);
+      var backHtml  = toAnkiHtml(c.back);
 
-      if (c.frontImage){
-        var fExt = extFromDataUrl(c.frontImage);
-        var fFilename = 'img_' + noteId + '_front.' + fExt;
-        media.push({ filename: fFilename, bytes: dataUrlToBytes(c.frontImage) });
-        frontHtml += '<br><img src="' + fFilename + '">';
-      }
-      if (c.backImage){
-        var bExt = extFromDataUrl(c.backImage);
-        var bFilename = 'img_' + noteId + '_back.' + bExt;
-        media.push({ filename: bFilename, bytes: dataUrlToBytes(c.backImage) });
-        backHtml += '<br><img src="' + bFilename + '">';
-      }
+      // support both old single-image and new multi-image storage format
+      var frontImgs = c.frontImages || (c.frontImage ? [c.frontImage] : []);
+      var backImgs  = c.backImages  || (c.backImage  ? [c.backImage]  : []);
+
+      frontImgs.forEach(function(dataUrl, imgIdx) {
+        var ext = extFromDataUrl(dataUrl);
+        var filename = 'img_' + noteId + '_front_' + imgIdx + '.' + ext;
+        media.push({ filename: filename, bytes: dataUrlToBytes(dataUrl) });
+        frontHtml += '<br><img src="' + filename + '">';
+      });
+
+      backImgs.forEach(function(dataUrl, imgIdx) {
+        var ext = extFromDataUrl(dataUrl);
+        var filename = 'img_' + noteId + '_back_' + imgIdx + '.' + ext;
+        media.push({ filename: filename, bytes: dataUrlToBytes(dataUrl) });
+        backHtml += '<br><img src="' + filename + '">';
+      });
 
       var flds = frontHtml + SEP + backHtml;
       var fldsHash = await sha1Hex(flds);
@@ -932,29 +991,17 @@
     var zip = new JSZip();
     zip.file('collection.anki2', binaryArray);
     var mediaManifest = {};
-    media.forEach(function(item, idx){
+    media.forEach(function(item, idx) {
       mediaManifest[idx] = item.filename;
       zip.file(String(idx), item.bytes);
     });
     zip.file('media', JSON.stringify(mediaManifest));
-    // application/octet-stream (not application/zip) so mobile browsers don't
-    // "correct" the .apkg filename extension to .zip based on the blob's MIME type.
-    var blob = await zip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
-    return blob;
-  }
-
-  function slugify(name){
-    return (name || 'deck').trim().toLowerCase().replace(/[^a-z0-9]+/g, '-').replace(/(^-|-$)/g, '') || 'deck';
-  }
-
-  function sanitizeFileBase(name){
-    var base = (name || 'deck').trim().replace(/\.apkg$/i, '');
-    base = base.replace(/[\/\\:*?"<>|]+/g, '-').trim();
-    return base || 'deck';
+    // application/octet-stream keeps mobile browsers from renaming .apkg to .zip
+    return zip.generateAsync({ type: 'blob', mimeType: 'application/octet-stream' });
   }
 
   exportBtn.addEventListener('click', async function(){
-    if (cards.length === 0){
+    if (cards.length === 0) {
       setStatus('File at least one card before exporting.', 'err');
       return;
     }
@@ -964,7 +1011,7 @@
     var originalLabel = exportBtn.textContent;
     exportBtn.textContent = 'Building deck…';
     setStatus('Generating ' + cards.length + ' card' + (cards.length === 1 ? '' : 's') + '…');
-    try{
+    try {
       var blob = await buildApkg(deckName, cards);
       var url = URL.createObjectURL(blob);
       var a = document.createElement('a');
@@ -974,8 +1021,8 @@
       a.click();
       document.body.removeChild(a);
       URL.revokeObjectURL(url);
-      setStatus('Downloaded ' + fileBase + '.apkg — import it via Anki\u2019s File \u2192 Import.', 'ok');
-    } catch(err){
+      setStatus('Downloaded ' + fileBase + '.apkg — import it via Anki’s File → Import.', 'ok');
+    } catch(err) {
       console.error(err);
       setStatus('Something went wrong building the deck: ' + err.message, 'err');
     } finally {
