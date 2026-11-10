@@ -502,14 +502,161 @@
   "use strict";
 
   var STORAGE_KEY = "cardCatalog.cards.v1";
-  var DECK_KEY = "cardCatalog.deckName.v1";
-  var FILE_KEY = "cardCatalog.fileName.v1";
+  var DECK_KEY    = "cardCatalog.deckName.v1";
+  var FILE_KEY    = "cardCatalog.fileName.v1";
+  var IDB_NAME    = "cardCatalogMedia";
+  var IDB_STORE   = "images";
+
+  // ---- IndexedDB helpers ----
+
+  var _db = null;
+
+  function getDb() {
+    if (_db) return Promise.resolve(_db);
+    return new Promise(function(resolve, reject) {
+      var req = indexedDB.open(IDB_NAME, 1);
+      req.onupgradeneeded = function(e) { e.target.result.createObjectStore(IDB_STORE); };
+      req.onsuccess = function(e) { _db = e.target.result; resolve(_db); };
+      req.onerror   = function(e) { reject(e.target.error); };
+    });
+  }
+
+  function idbPut(id, value) {
+    return getDb().then(function(db) {
+      return new Promise(function(resolve, reject) {
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        tx.objectStore(IDB_STORE).put(value, id);
+        tx.oncomplete = resolve;
+        tx.onerror    = function(e) { reject(e.target.error); };
+      });
+    });
+  }
+
+  function idbGet(id) {
+    return getDb().then(function(db) {
+      return new Promise(function(resolve, reject) {
+        var req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).get(id);
+        req.onsuccess = function(e) { resolve(e.target.result || null); };
+        req.onerror   = function(e) { reject(e.target.error); };
+      });
+    });
+  }
+
+  function idbDelete(ids) {
+    if (!ids || !ids.length) return Promise.resolve();
+    return getDb().then(function(db) {
+      return new Promise(function(resolve, reject) {
+        var tx = db.transaction(IDB_STORE, 'readwrite');
+        ids.forEach(function(id) { tx.objectStore(IDB_STORE).delete(id); });
+        tx.oncomplete = resolve;
+        tx.onerror    = function(e) { reject(e.target.error); };
+      });
+    });
+  }
+
+  function idbGetAllKeys() {
+    return getDb().then(function(db) {
+      return new Promise(function(resolve, reject) {
+        var req = db.transaction(IDB_STORE, 'readonly').objectStore(IDB_STORE).getAllKeys();
+        req.onsuccess = function(e) { resolve(e.target.result || []); };
+        req.onerror   = function(e) { reject(e.target.error); };
+      });
+    });
+  }
+
+  // ---- Image helpers ----
+
+  function makeImageId() {
+    return 'img_' + Date.now() + '_' + Math.random().toString(36).substr(2, 9);
+  }
+
+  async function storeImages(dataUrls) {
+    var ids = dataUrls.map(makeImageId);
+    await Promise.all(ids.map(function(id, i) { return idbPut(id, dataUrls[i]); }));
+    return ids;
+  }
+
+  function fetchImages(ids) {
+    return Promise.all(ids.map(idbGet));
+  }
+
+  function removeImages(ids) {
+    idbDelete(ids).catch(function(e) { console.warn('removeImages:', e); });
+  }
+
+  // Delete images in IndexedDB that are no longer referenced by any card
+  function gcImages() {
+    idbGetAllKeys().then(function(allKeys) {
+      var used = new Set();
+      cards.forEach(function(c) {
+        (c.frontImageIds || []).forEach(function(id) { used.add(id); });
+        (c.backImageIds  || []).forEach(function(id) { used.add(id); });
+      });
+      var orphans = allKeys.filter(function(k) { return !used.has(k); });
+      if (orphans.length) idbDelete(orphans).catch(function(){});
+    }).catch(function(){});
+  }
+
+  // ---- Card array ----
 
   var cards = [];
-  try {
-    var saved = localStorage.getItem(STORAGE_KEY);
-    if (saved) cards = JSON.parse(saved);
-  } catch(e) { cards = []; }
+
+  // Load cards: metadata from localStorage, images from IndexedDB.
+  // Also transparently migrates old cards that stored data URLs in localStorage.
+  async function initCards() {
+    var str = localStorage.getItem(STORAGE_KEY);
+    if (!str) return;
+    var raw;
+    try { raw = JSON.parse(str); } catch(e) { return; }
+
+    var needsRepersist = false;
+
+    for (var i = 0; i < raw.length; i++) {
+      var m = raw[i];
+      var card = { front: m.front || '', back: m.back || '', tags: m.tags || '' };
+
+      // front images
+      if (m.frontImageIds && m.frontImageIds.length) {
+        var fi = await fetchImages(m.frontImageIds);
+        card.frontImageIds = m.frontImageIds.filter(function(_, j) { return fi[j] != null; });
+        card.frontImages   = fi.filter(Boolean);
+      } else {
+        var oldFront = m.frontImages || (m.frontImage ? [m.frontImage] : []);
+        if (oldFront.length) {
+          try {
+            card.frontImageIds = await storeImages(oldFront);
+            needsRepersist = true;
+          } catch(e) { card.frontImageIds = []; }
+          card.frontImages = oldFront.slice();
+        } else {
+          card.frontImages = []; card.frontImageIds = [];
+        }
+      }
+
+      // back images
+      if (m.backImageIds && m.backImageIds.length) {
+        var bi = await fetchImages(m.backImageIds);
+        card.backImageIds = m.backImageIds.filter(function(_, j) { return bi[j] != null; });
+        card.backImages   = bi.filter(Boolean);
+      } else {
+        var oldBack = m.backImages || (m.backImage ? [m.backImage] : []);
+        if (oldBack.length) {
+          try {
+            card.backImageIds = await storeImages(oldBack);
+            needsRepersist = true;
+          } catch(e) { card.backImageIds = []; }
+          card.backImages = oldBack.slice();
+        } else {
+          card.backImages = []; card.backImageIds = [];
+        }
+      }
+
+      cards.push(card);
+    }
+
+    if (needsRepersist) persist(); // rewrite localStorage with IDs only
+    gcImages();
+  }
 
   var frontInput     = document.getElementById("frontInput");
   var backInput      = document.getElementById("backInput");
@@ -617,11 +764,17 @@
   // ---- card model ----
 
   function persist() {
+    var meta = cards.map(function(c) {
+      var m = { front: c.front, back: c.back, tags: c.tags };
+      if (c.frontImageIds && c.frontImageIds.length) m.frontImageIds = c.frontImageIds;
+      if (c.backImageIds  && c.backImageIds.length)  m.backImageIds  = c.backImageIds;
+      return m;
+    });
     try {
-      localStorage.setItem(STORAGE_KEY, JSON.stringify(cards));
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(meta));
       return true;
     } catch(e) {
-      setStatus("Card NOT saved — local storage is full (too many/large images). Export your deck now before closing or refreshing this tab.", "err");
+      setStatus("Card NOT saved — local storage is full. Export your deck now before closing or refreshing this tab.", "err");
       return false;
     }
   }
@@ -667,27 +820,49 @@
     var btn = e.target.closest(".remove");
     if (!btn) return;
     var idx = parseInt(btn.getAttribute("data-idx"), 10);
+    var c = cards[idx];
+    var imgIds = (c.frontImageIds || []).concat(c.backImageIds || []);
     cards.splice(idx, 1);
     persist();
     render();
+    if (imgIds.length) removeImages(imgIds);
   });
 
-  function addCard(front, back, tags, frontImages, backImages) {
+  function addCard(front, back, tags, frontImages, frontImageIds, backImages, backImageIds) {
     front = (front || "").trim();
     back  = (back  || "").trim();
     if (!front && (!frontImages || !frontImages.length)) return false;
     if (!back  && (!backImages  || !backImages.length))  return false;
     var card = { front: front, back: back, tags: (tags || "").trim() };
-    if (frontImages && frontImages.length) card.frontImages = frontImages.slice();
-    if (backImages  && backImages.length)  card.backImages  = backImages.slice();
+    card.frontImages   = (frontImages   || []).slice();
+    card.frontImageIds = (frontImageIds || []).slice();
+    card.backImages    = (backImages    || []).slice();
+    card.backImageIds  = (backImageIds  || []).slice();
     cards.push(card);
     return true;
   }
 
-  addCardBtn.addEventListener("click", function(){
-    var ok = addCard(frontInput.value, backInput.value, tagsInput.value, pendingFrontImages, pendingBackImages);
+  addCardBtn.addEventListener("click", async function() {
+    addCardBtn.disabled = true;
+    var frontImageIds = [], backImageIds = [];
+    try {
+      if (pendingFrontImages.length) frontImageIds = await storeImages(pendingFrontImages);
+      if (pendingBackImages.length)  backImageIds  = await storeImages(pendingBackImages);
+    } catch(e) {
+      console.error('storeImages:', e);
+      setStatus("Failed to save images — try again.", "err");
+      addCardBtn.disabled = false;
+      return;
+    }
+    var ok = addCard(
+      frontInput.value, backInput.value, tagsInput.value,
+      pendingFrontImages, frontImageIds,
+      pendingBackImages,  backImageIds
+    );
     if (!ok) {
+      removeImages(frontImageIds.concat(backImageIds));
       setStatus("A card needs a front (text or image) and a back (text or image).", "err");
+      addCardBtn.disabled = false;
       return;
     }
     frontInput.value = "";
@@ -698,6 +873,7 @@
     var saved = persist();
     render();
     if (saved) setStatus("Card filed.", "ok");
+    addCardBtn.disabled = false;
   });
 
   [frontInput, backInput].forEach(function(el) {
@@ -737,10 +913,16 @@
   clearAllBtn.addEventListener("click", function(){
     if (cards.length === 0) return;
     if (!confirm("Remove all " + cards.length + " filed cards? This can't be undone.")) return;
+    var allIds = [];
+    cards.forEach(function(c) {
+      allIds.push.apply(allIds, c.frontImageIds || []);
+      allIds.push.apply(allIds, c.backImageIds  || []);
+    });
     cards = [];
     persist();
     render();
     setStatus("Drawer cleared.", "ok");
+    if (allIds.length) removeImages(allIds);
   });
 
   function setStatus(msg, cls) {
@@ -1033,7 +1215,10 @@
     }
   });
 
-  render();
+  initCards().then(render).catch(function(err) {
+    console.error('initCards failed:', err);
+    render();
+  });
 })();
 </script>
 </body>

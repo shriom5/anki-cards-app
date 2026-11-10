@@ -60,14 +60,16 @@ function checksumFromHex(hex){
 }
 
 // testable version of addCard: takes explicit cards array instead of closure
-function addCard(cards, front, back, tags, frontImages, backImages){
+function addCard(cards, front, back, tags, frontImages, frontImageIds, backImages, backImageIds){
   front=(front||'').trim();
   back=(back||'').trim();
   if(!front&&(!frontImages||!frontImages.length)) return false;
   if(!back &&(!backImages ||!backImages.length))  return false;
   var card={front:front,back:back,tags:(tags||'').trim()};
-  if(frontImages&&frontImages.length) card.frontImages=frontImages.slice();
-  if(backImages &&backImages.length)  card.backImages =backImages.slice();
+  card.frontImages   =(frontImages  ||[]).slice();
+  card.frontImageIds =(frontImageIds||[]).slice();
+  card.backImages    =(backImages   ||[]).slice();
+  card.backImageIds  =(backImageIds ||[]).slice();
   cards.push(card);
   return true;
 }
@@ -161,38 +163,50 @@ describe('addCard — validation', function(){
   it('trims back whitespace',         function(){ var c=[]; addCard(c,'Q','  A  ',''); eq(c[0].back,'A'); });
   it('stores tags',                   function(){ var c=[]; addCard(c,'Q','A','t1 t2'); eq(c[0].tags,'t1 t2'); });
   it('allows image-only front',       function(){ var c=[]; ok(addCard(c,'','A','',['data:image/png;base64,a'],[])); });
-  it('allows image-only back',        function(){ var c=[]; ok(addCard(c,'Q','','',[], ['data:image/png;base64,b'])); });
+  it('allows image-only back',        function(){ var c=[]; ok(addCard(c,'Q','','', [],[],['data:image/png;base64,b'],[])); });
 });
 
 describe('addCard — multi-image storage', function(){
-  it('stores multiple front images',  function(){
+  it('stores multiple front images', function(){
     var c=[], imgs=['data:image/png;base64,a','data:image/png;base64,b'];
-    addCard(c,'Q','A','',imgs,[]);
+    addCard(c,'Q','A','',imgs,['id1','id2'],[],[]);
     deq(c[0].frontImages,imgs);
   });
-  it('stores multiple back images',   function(){
+  it('stores front image IDs', function(){
+    var c=[], imgs=['data:image/png;base64,a'];
+    addCard(c,'Q','A','',imgs,['img_abc'],[],[]);
+    deq(c[0].frontImageIds,['img_abc']);
+  });
+  it('stores multiple back images', function(){
     var c=[], imgs=['data:image/png;base64,c','data:image/png;base64,d'];
-    addCard(c,'Q','A','',[], imgs);
+    addCard(c,'Q','A','', [],[],imgs,['id3','id4']);
     deq(c[0].backImages,imgs);
   });
-  it('slices arrays — mutations do not affect stored card', function(){
-    var c=[], imgs=['data:image/png;base64,x'];
-    addCard(c,'Q','A','',imgs,[]);
+  it('stores back image IDs', function(){
+    var c=[], imgs=['data:image/png;base64,c'];
+    addCard(c,'Q','A','', [],[],imgs,['img_xyz']);
+    deq(c[0].backImageIds,['img_xyz']);
+  });
+  it('slices image arrays — mutations do not affect stored card', function(){
+    var c=[], imgs=['data:image/png;base64,x'], ids=['id1'];
+    addCard(c,'Q','A','',imgs,ids,[],[]);
     imgs.push('data:image/png;base64,y');
+    ids.push('id2');
     eq(c[0].frontImages.length,1);
+    eq(c[0].frontImageIds.length,1);
   });
-  it('omits frontImages key when no images', function(){
-    var c=[]; addCard(c,'Q','A','',[], []);
-    nok('frontImages' in c[0]);
-  });
-  it('omits backImages key when no images',  function(){
-    var c=[]; addCard(c,'Q','A','',[], []);
-    nok('backImages' in c[0]);
+  it('stores empty arrays when no images', function(){
+    var c=[]; addCard(c,'Q','A','', [],[],[],[]);
+    deq(c[0].frontImages,[]);
+    deq(c[0].frontImageIds,[]);
+    deq(c[0].backImages,[]);
+    deq(c[0].backImageIds,[]);
   });
   it('stores empty-text card with two front images', function(){
     var c=[], imgs=['data:image/png;base64,1','data:image/png;base64,2'];
-    ok(addCard(c,'','back','',imgs,[]));
+    ok(addCard(c,'','back','',imgs,['a','b'],[],[]));
     eq(c[0].frontImages.length,2);
+    eq(c[0].frontImageIds.length,2);
   });
 });
 
